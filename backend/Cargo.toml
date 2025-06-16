@@ -1,0 +1,11 @@
+[package]
+name = "seodisparate_comments_backend"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+salvo = { version = "0.79", features = ["affix-state"] }
+reqwest = "0.12"
+tokio = "1.45"
+mysql = "26.0"
+uuid = { version = "1.17", features = ["v4", "v5"] }
