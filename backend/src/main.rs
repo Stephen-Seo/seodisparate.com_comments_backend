@@ -160,7 +160,7 @@ async fn login_to_comment(
         &[
             ("client_id", salvo_conf.oauth_user.as_str()),
             ("state", uuid.as_str()),
-            ("redirect_url", redirect_url_escaped.as_str()),
+            ("redirect_uri", redirect_url_escaped.as_str()),
         ],
     )
     .map_err(|_| error::Error::from("Failed to parse github api url!"))?;
