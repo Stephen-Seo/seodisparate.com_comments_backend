@@ -1,4 +1,8 @@
-use std::{fs::File, io::Read, path::Path};
+use std::{
+    fs::File,
+    io::{BufReader, Read},
+    path::Path,
+};
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -58,6 +62,7 @@ impl TryFrom<&Path> for Config {
 
     fn try_from(value: &Path) -> Result<Self, Self::Error> {
         let file = File::open(value)?;
+        let file_buffered = BufReader::new(file);
 
         let mut sql_user: Result<String, Self::Error> = Err("sql_user not specified!".into());
         let mut sql_pass: Result<String, Self::Error> = Err("sql_pass not specified!".into());
@@ -75,7 +80,7 @@ impl TryFrom<&Path> for Config {
         let mut key: String = String::new();
         let mut val: String = String::new();
         let mut is_parsing_key = true;
-        for byte in file.bytes() {
+        for byte in file_buffered.bytes() {
             let c: char = byte?.into();
             if c == '\r' {
                 continue;
@@ -86,41 +91,39 @@ impl TryFrom<&Path> for Config {
                 } else {
                     key.push(c);
                 }
-            } else {
-                if c == '\n' {
-                    is_parsing_key = true;
-                    if key == "sql_user" {
-                        sql_user = Ok(val);
-                    } else if key == "sql_pass" {
-                        sql_pass = Ok(val);
-                    } else if key == "sql_addr" {
-                        sql_addr = Ok(val);
-                    } else if key == "sql_port" {
-                        sql_port = Ok(val);
-                    } else if key == "sql_db" {
-                        sql_db = Ok(val);
-                    } else if key == "tcp_addr" {
-                        tcp_addr = val;
-                    } else if key == "tcp_port" {
-                        tcp_port = val.parse()?;
-                    } else if key == "oauth_user" {
-                        oauth_user = Ok(val);
-                    } else if key == "oauth_token" {
-                        oauth_token = Ok(val);
-                    } else if key == "base_url" {
-                        base_url = Ok(val);
-                    } else if key == "allowed_url" {
-                        allowed_urls.push(val);
-                    } else if key == "allowed_bid" {
-                        allowed_bids.push(val);
-                    } else {
-                        println!("WARNING: Got unknown config key \"{}\"!", key);
-                    }
-                    key = String::new();
-                    val = String::new();
+            } else if c == '\n' {
+                is_parsing_key = true;
+                if key == "sql_user" {
+                    sql_user = Ok(val);
+                } else if key == "sql_pass" {
+                    sql_pass = Ok(val);
+                } else if key == "sql_addr" {
+                    sql_addr = Ok(val);
+                } else if key == "sql_port" {
+                    sql_port = Ok(val);
+                } else if key == "sql_db" {
+                    sql_db = Ok(val);
+                } else if key == "tcp_addr" {
+                    tcp_addr = val;
+                } else if key == "tcp_port" {
+                    tcp_port = val.parse()?;
+                } else if key == "oauth_user" {
+                    oauth_user = Ok(val);
+                } else if key == "oauth_token" {
+                    oauth_token = Ok(val);
+                } else if key == "base_url" {
+                    base_url = Ok(val);
+                } else if key == "allowed_url" {
+                    allowed_urls.push(val);
+                } else if key == "allowed_bid" {
+                    allowed_bids.push(val);
                 } else {
-                    val.push(c);
+                    println!("WARNING: Got unknown config key \"{}\"!", key);
                 }
+                key = String::new();
+                val = String::new();
+            } else {
+                val.push(c);
             }
         }
 

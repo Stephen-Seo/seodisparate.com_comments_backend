@@ -94,12 +94,10 @@ async fn login_to_comment(
     res: &mut Response,
     depot: &mut Depot,
 ) -> Result<String, error::Error> {
-    let blog_id: String = req
-        .try_param("blog_id")
-        .map_err(|e| Error::err_to_client_err(e))?;
+    let blog_id: String = req.try_param("blog_id").map_err(Error::err_to_client_err)?;
     let blog_url: String = req
         .try_param("blog_url")
-        .map_err(|e| Error::err_to_client_err(e))?;
+        .map_err(Error::err_to_client_err)?;
     let salvo_conf = depot.obtain::<Config>().unwrap();
     let is_allowed_url: bool = salvo_conf.allowed_urls.iter().fold(false, |acc, val| {
         if acc { acc } else { blog_url.starts_with(val) }
@@ -269,11 +267,11 @@ async fn submit_comment(req: &mut Request, depot: &mut Depot) -> Result<String, 
 
     let req_state: String = request_json
         .get("state")
-        .ok_or(error::Error::from("JSON parse error: \"state\"").to_client_err())?
+        .ok_or(error::Error::from("JSON parse error: \"state\"").into_client_err())?
         .to_string();
     let req_comment: String = request_json
         .get("comment_text")
-        .ok_or(error::Error::from("JSON parse error: \"comment_text\"").to_client_err())?
+        .ok_or(error::Error::from("JSON parse error: \"comment_text\"").into_client_err())?
         .to_string();
 
     let salvo_conf = depot.obtain::<Config>().unwrap();

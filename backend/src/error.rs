@@ -15,7 +15,7 @@ pub enum Error {
 }
 
 impl Error {
-    pub fn to_client_err(self) -> Self {
+    pub fn into_client_err(self) -> Self {
         Error::ClientErr(Box::new(self))
     }
 
@@ -30,7 +30,7 @@ impl Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::Generic(s) => f.write_str(&s),
+            Error::Generic(s) => f.write_str(s),
             Error::IO(error) => error.fmt(f),
             Error::ParseInt(error) => error.fmt(f),
             Error::Mysql(error) => error.fmt(f),
