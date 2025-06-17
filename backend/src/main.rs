@@ -53,8 +53,14 @@ pub const WRITE_COMMENT_PAGE: &str = r#"
     </head>
     <body>
         <h1>Write a Comment</h1>
+        <div>
+            <p>Note that this site reserves the right to delete any comment on
+            the grounds that it is spam/hateful/etc. Please use common sense,
+            and please be courteous to others, even when contrary.</p>
+            <p>You can edit/delete your comment after posting it.</p>
+        </div><br>
         <img width="64" height="64" src="{USER_AVATAR_URL}" /> <b>{USER_NAME}</b> <a href="{USER_PROFILE}">(User Profile)</a><br>
-        <textarea id="comment_text" name="comment_text" rows="10" autofocus=true><br>
+        <textarea id="comment_text" name="comment_text" rows="10" cols="50" autofocus=true></textarea><br>
         <button id="comment_submit_button">Submit</button>
         <script>
             "use strict;"
