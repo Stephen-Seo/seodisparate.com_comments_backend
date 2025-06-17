@@ -12,6 +12,8 @@ pub struct Config {
     oauth_user: String,
     oauth_token: String,
     base_url: String,
+    allowed_urls: Vec<String>,
+    allowed_bids: Vec<String>,
 }
 
 impl Config {
@@ -41,6 +43,14 @@ impl Config {
     pub fn get_base_url(&self) -> &str {
         &self.base_url
     }
+
+    pub fn get_allowed_urls(&self) -> &[String] {
+        &self.allowed_urls
+    }
+
+    pub fn get_allowed_bids(&self) -> &[String] {
+        &self.allowed_bids
+    }
 }
 
 impl TryFrom<&Path> for Config {
@@ -59,6 +69,8 @@ impl TryFrom<&Path> for Config {
         let mut oauth_user: Result<String, Self::Error> = Err("oauth_user not specified!".into());
         let mut oauth_token: Result<String, Self::Error> = Err("oauth_token not specified!".into());
         let mut base_url: Result<String, Self::Error> = Err("base_url not specified!".into());
+        let mut allowed_urls: Vec<String> = Vec::new();
+        let mut allowed_bids: Vec<String> = Vec::new();
 
         let mut key: String = String::new();
         let mut val: String = String::new();
@@ -97,6 +109,10 @@ impl TryFrom<&Path> for Config {
                         oauth_token = Ok(val);
                     } else if key == "base_url" {
                         base_url = Ok(val);
+                    } else if key == "allowed_url" {
+                        allowed_urls.push(val);
+                    } else if key == "allowed_bid" {
+                        allowed_bids.push(val);
                     } else {
                         println!("WARNING: Got unknown config key \"{}\"!", key);
                     }
@@ -129,6 +145,10 @@ impl TryFrom<&Path> for Config {
                 oauth_token = Ok(val);
             } else if key == "base_url" {
                 base_url = Ok(val);
+            } else if key == "allowed_url" {
+                allowed_urls.push(val);
+            } else if key == "allowed_bid" {
+                allowed_bids.push(val);
             } else {
                 println!("WARNING: Got unknown config key \"{}\"!", key);
             }
@@ -145,6 +165,8 @@ impl TryFrom<&Path> for Config {
             oauth_user: oauth_user?,
             oauth_token: oauth_token?,
             base_url: base_url?,
+            allowed_urls,
+            allowed_bids,
         })
     }
 }
