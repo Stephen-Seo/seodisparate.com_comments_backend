@@ -100,8 +100,11 @@ struct Config {
 }
 
 #[handler]
-async fn root_handler() -> &'static str {
-    "<html><body><b>Welcome</b></body></html>"
+async fn root_handler(res: &mut Response) {
+    res.body(format!(
+        "<html><head><style>{}</style></head><body><h1>Welcome</h1></body></html>",
+        COMMON_CSS
+    ));
 }
 
 #[handler]
@@ -109,7 +112,7 @@ async fn login_to_comment(
     req: &mut Request,
     res: &mut Response,
     depot: &mut Depot,
-) -> Result<String, error::Error> {
+) -> Result<(), error::Error> {
     let blog_id: String = req.try_param("blog_id").map_err(Error::err_to_client_err)?;
     let blog_url: String = req
         .try_param("blog_url")
@@ -121,12 +124,13 @@ async fn login_to_comment(
     if !is_allowed_url {
         eprintln!("Client blog_url is invalid! {}", blog_url);
         res.status_code(StatusCode::BAD_REQUEST);
-        return Ok(format!(
+        res.body(format!(
             r#"<html><head><style>{}</style></head><body>
             <b>Bad Request</b>
             </body></html>"#,
             COMMON_CSS,
         ));
+        return Ok(());
     }
     let is_allowed_bid: bool = salvo_conf
         .allowed_bids
@@ -135,12 +139,13 @@ async fn login_to_comment(
     if !is_allowed_bid {
         eprintln!("Client blog id is invalid! {}", blog_id);
         res.status_code(StatusCode::BAD_REQUEST);
-        return Ok(format!(
+        res.body(format!(
             r#"<html><head><style>{}</style></head><body>
             <b>Bad Request</b>
             </body></html>"#,
             COMMON_CSS,
         ));
+        return Ok(());
     }
     let uuid = sql::create_rng_uuid(&salvo_conf.db_conn_string)?;
     let redirect_url = Url::parse_with_params(
@@ -166,7 +171,8 @@ async fn login_to_comment(
         "#,
         github_api_url.as_str()
     );
-    Ok(format!(
+
+    res.body(format!(
         r#"<html><head><style>{}</style></head><body>
         <b>Redirecting to Github for Authentication...</b>
         <script>
@@ -174,7 +180,9 @@ async fn login_to_comment(
         </script>
         </body></html>"#,
         COMMON_CSS, script
-    ))
+    ));
+
+    Ok(())
 }
 
 #[handler]
@@ -182,11 +190,19 @@ async fn github_authenticated(
     req: &mut Request,
     res: &mut Response,
     depot: &mut Depot,
-) -> Result<String, error::Error> {
-    let blog_id: String = req.try_param("blog_id")?;
-    let blog_url: String = req.try_param("blog_url")?;
-    let state: String = req.try_param("state")?;
-    let code: String = req.try_param("code")?;
+) -> Result<(), error::Error> {
+    let blog_id: String = req
+        .try_param("blog_id")
+        .map_err(error::Error::err_to_client_err)?;
+    let blog_url: String = req
+        .try_param("blog_url")
+        .map_err(error::Error::err_to_client_err)?;
+    let state: String = req
+        .try_param("state")
+        .map_err(error::Error::err_to_client_err)?;
+    let code: String = req
+        .try_param("code")
+        .map_err(error::Error::err_to_client_err)?;
 
     let salvo_conf = depot.obtain::<Config>().unwrap();
 
@@ -216,12 +232,13 @@ async fn github_authenticated(
     if !access_token.is_string() {
         eprintln!("Received access_token is not a string!\n");
         res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
-        return Ok(format!(
+        res.body(format!(
             r#"<html><head><style>{}</style></head><body>
             <b>Internal Server Error</b>
             </body></html>"#,
             COMMON_CSS,
         ));
+        return Ok(());
     }
     let access_token: String = access_token.to_string();
     let user_info = client
@@ -266,19 +283,22 @@ async fn github_authenticated(
         &blog_id,
     )?;
 
-    Ok(WRITE_COMMENT_PAGE
-        .replace("{BLOG_ID}", &blog_id)
-        .replace("{COMMON_CSS}", COMMON_CSS)
-        .replace("{USER_AVATAR_URL}", &user_avatar_url)
-        .replace("{USER_NAME}", &user_name)
-        .replace("{USER_PROFILE}", &user_url)
-        .replace("{BASE_URL}", &salvo_conf.base_url)
-        .replace("{BLOG_URL}", &blog_url)
-        .replace("{STATE_STRING}", &state))
+    res.body(
+        WRITE_COMMENT_PAGE
+            .replace("{BLOG_ID}", &blog_id)
+            .replace("{COMMON_CSS}", COMMON_CSS)
+            .replace("{USER_AVATAR_URL}", &user_avatar_url)
+            .replace("{USER_NAME}", &user_name)
+            .replace("{USER_PROFILE}", &user_url)
+            .replace("{BASE_URL}", &salvo_conf.base_url)
+            .replace("{BLOG_URL}", &blog_url)
+            .replace("{STATE_STRING}", &state),
+    );
+    Ok(())
 }
 
 #[handler]
-async fn submit_comment(req: &mut Request, depot: &mut Depot) -> Result<String, error::Error> {
+async fn submit_comment(req: &mut Request, depot: &mut Depot) -> Result<(), error::Error> {
     let request_json: serde_json::Value = req.parse_json().await?;
 
     let req_state: String = request_json
@@ -296,7 +316,7 @@ async fn submit_comment(req: &mut Request, depot: &mut Depot) -> Result<String, 
 
     let _did_remove = sql::check_remove_rng_uuid(&salvo_conf.db_conn_string, &req_state)?;
 
-    Ok(String::from("Accepted."))
+    Ok(())
 }
 
 // TODO: get_comment

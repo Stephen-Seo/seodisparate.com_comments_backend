@@ -107,7 +107,7 @@ impl Writer for Error {
         match &self {
             Error::ClientErr(_error) => {
                 res.status_code(StatusCode::BAD_REQUEST);
-                res.render(format!(
+                res.body(format!(
                     r#"<html><head><style>{}</style></head><body>
                     <b>Bad Request</b>
                     </body></html>"#,
@@ -116,7 +116,7 @@ impl Writer for Error {
             }
             _ => {
                 res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
-                res.render(format!(
+                res.body(format!(
                     r#"<html><head><style>{}</style></head><body>
                     <b>Internal Server Error</b>
                     </body></html>"#,
