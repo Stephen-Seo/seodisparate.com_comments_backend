@@ -1,6 +1,7 @@
 pub fn percent_escape_uri(uri: &str) -> String {
-    uri.replace(":", "%3A")
-        .replace("/", "%2F")
+    uri
+        //.replace(":", "%3A")
+        //.replace("/", "%2F")
         .replace("?", "%3F")
         .replace("#", "%23")
         .replace("[", "%5B")
