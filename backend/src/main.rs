@@ -423,24 +423,14 @@ async fn github_auth_make_comment(
     let access_token = json.get("access_token").ok_or(error::Error::from(
         "Failed to parse access_token from response from Github!",
     ))?;
-    if !access_token.is_string() {
-        eprintln!("Received access_token is not a string!\n");
-        res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
-        res.body(format!(
-            r#"<html><head><style>{}</style></head><body>
-            <b>Internal Server Error</b>
-            </body></html>"#,
-            COMMON_CSS,
-        ));
-        return Ok(());
-    }
     let access_token_str: &str = access_token
         .as_str()
         .ok_or(Error::from("Github access_token was not a string!"))?;
-    eprintln!("DEBUG: Access token: {}", access_token_str);
+    // eprintln!("DEBUG: Access token: {}", access_token_str);
     let user_info = client
         .get("https://api.github.com/user")
-        .header("Accept", "application/vnd.github+json")
+        // .header("Accept", "application/vnd.github+json")
+        .header("Accept", "application/json")
         .header("Authorization", format!("Bearer {}", access_token_str))
         .header("X-Github-Api-Version", "2022-11-28")
         .send()
@@ -627,22 +617,14 @@ async fn github_auth_edit_comment(
     let access_token = json.get("access_token").ok_or(error::Error::from(
         "Failed to parse access_token from response from Github!",
     ))?;
-    if !access_token.is_string() {
-        eprintln!("Received access_token is not a string!\n");
-        res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
-        res.body(format!(
-            r#"<html><head><style>{}</style></head><body>
-            <b>Internal Server Error</b>
-            </body></html>"#,
-            COMMON_CSS,
-        ));
-        return Ok(());
-    }
-    let access_token: String = access_token.to_string();
+    let access_token_str: &str = access_token
+        .as_str()
+        .ok_or(Error::from("Github access token was not a string!"))?;
     let user_info = client
         .get("https://api.github.com/user")
-        .header("Accept", "application/vnd.github+json")
-        .header("Authorization", format!("Bearer {}", access_token))
+        // .header("Accept", "application/vnd.github+json")
+        .header("Accept", "application/json")
+        .header("Authorization", format!("Bearer {}", access_token_str))
         .header("X-Github-Api-Version", "2022-11-28")
         .send()
         .await?;
@@ -845,22 +827,14 @@ async fn github_auth_del_comment(
     let access_token = json.get("access_token").ok_or(error::Error::from(
         "Failed to parse access_token from response from Github!",
     ))?;
-    if !access_token.is_string() {
-        eprintln!("Received access_token is not a string!\n");
-        res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
-        res.body(format!(
-            r#"<html><head><style>{}</style></head><body>
-            <b>Internal Server Error</b>
-            </body></html>"#,
-            COMMON_CSS,
-        ));
-        return Ok(());
-    }
-    let access_token: String = access_token.to_string();
+    let access_token_str: &str = access_token
+        .as_str()
+        .ok_or(Error::from("Github access_token was not a string!"))?;
     let user_info = client
         .get("https://api.github.com/user")
-        .header("Accept", "application/vnd.github+json")
-        .header("Authorization", format!("Bearer {}", access_token))
+        // .header("Accept", "application/vnd.github+json")
+        .header("Accept", "application/json")
+        .header("Authorization", format!("Bearer {}", access_token_str))
         .header("X-Github-Api-Version", "2022-11-28")
         .send()
         .await?;
