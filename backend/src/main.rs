@@ -434,8 +434,9 @@ async fn github_auth_make_comment(
         .header("Authorization", format!("Bearer {}", access_token_str))
         .header("X-Github-Api-Version", "2022-11-28")
         .send()
-        .await?;
-    eprintln!("DEBUG: {:?}", user_info);
+        .await?
+        .error_for_status()?;
+    // eprintln!("DEBUG: {:?}", user_info);
     let user_info: serde_json::Value = user_info.json().await?;
 
     let user_id: u64 = user_info
@@ -627,7 +628,8 @@ async fn github_auth_edit_comment(
         .header("Authorization", format!("Bearer {}", access_token_str))
         .header("X-Github-Api-Version", "2022-11-28")
         .send()
-        .await?;
+        .await?
+        .error_for_status()?;
     let user_info: serde_json::Value = user_info.json().await?;
 
     let user_id: u64 = user_info
@@ -837,7 +839,8 @@ async fn github_auth_del_comment(
         .header("Authorization", format!("Bearer {}", access_token_str))
         .header("X-Github-Api-Version", "2022-11-28")
         .send()
-        .await?;
+        .await?
+        .error_for_status()?;
     let user_info: serde_json::Value = user_info.json().await?;
 
     let user_id: u64 = user_info
