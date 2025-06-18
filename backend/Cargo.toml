@@ -7,7 +7,8 @@ edition = "2024"
 salvo = { version = "0.79", features = ["affix-state"] }
 reqwest = { version = "0.12", features = ["json", "native-tls-vendored"] }
 tokio = "1.45"
-mysql = "26.0"
+mysql = { version = "26.0", features = ["time"] }
 uuid = { version = "1.17", features = ["v4", "v5"] }
+serde = "1.0"
 serde_json = "1.0"
-time = "0.3"
+time = { version = "0.3", features = ["serde", "formatting", "local-offset"] }

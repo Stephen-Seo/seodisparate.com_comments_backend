@@ -20,7 +20,30 @@ use std::time::Duration;
 use crate::error::Error;
 use mysql::prelude::*;
 use mysql::*;
-use time::UtcDateTime;
+use serde::Serialize;
+use time::{PrimitiveDateTime, UtcDateTime, UtcOffset, format_description};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Comment {
+    pub comment_id: String,
+    pub username: String,
+    pub userurl: String,
+    pub useravatar: String,
+    pub create_date: String,
+    pub edit_date: String,
+    pub comment: String,
+}
+
+#[derive(Debug)]
+struct PreProcessedComment {
+    comment_id: String,
+    username: String,
+    userurl: String,
+    useravatar: String,
+    create_date: Result<String, time::error::Format>,
+    edit_date: Result<String, time::error::Format>,
+    comment: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PseudoComment {
@@ -314,4 +337,49 @@ pub fn try_delete_comment(conn_str: &str, cid: &str, uid: u64) -> Result<(), Err
     conn.exec_drop("DELETE FROM COMMENT WHERE uuid = ?, uid = ?", (cid, uid))?;
 
     Ok(())
+}
+
+pub fn get_comments_per_blog_id(conn_str: &str, blog_id: &str) -> Result<Vec<Comment>, Error> {
+    let pool = Pool::new(conn_str)?;
+
+    let mut conn = pool.get_conn()?;
+
+    let utc_offset = UtcOffset::current_local_offset()?;
+
+    let format = format_description::parse(
+        "[year]-[month]-[day]T[hour]:[minute]:[second][offset_hour sign:mandatory]:[offset_minute]",
+    )?;
+
+    let pre_proc_comments = conn.exec_map(
+        "SELECT uuid, username, userurl, useravatar, creation_date, edit_date, comment FROM COMMENT WHERE blog_post_id = ? ORDER BY creation_date",
+        (blog_id,), |(uuid, username, userurl, useravatar, creation_date, edit_date, comment)| {
+            let create_time: PrimitiveDateTime = creation_date;
+            let edit_time: PrimitiveDateTime = edit_date;
+            PreProcessedComment {
+                comment_id: uuid,
+                username,
+                userurl,
+                useravatar,
+                create_date: create_time.assume_offset(utc_offset).format(&format),
+                edit_date: edit_time.assume_offset(utc_offset).format(&format),
+                comment,
+            }
+        }
+    )?;
+
+    let mut comments = Vec::new();
+
+    for pre in pre_proc_comments {
+        comments.push(Comment {
+            comment_id: pre.comment_id,
+            username: pre.username,
+            userurl: pre.userurl,
+            useravatar: pre.useravatar,
+            create_date: pre.create_date?,
+            edit_date: pre.edit_date?,
+            comment: pre.comment,
+        });
+    }
+
+    Ok(comments)
 }

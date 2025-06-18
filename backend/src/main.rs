@@ -898,7 +898,24 @@ async fn github_auth_del_comment(
     Ok(())
 }
 
-// TODO: get_comment
+#[handler]
+async fn get_comments_by_blog_id(
+    req: &mut Request,
+    res: &mut Response,
+    depot: &mut Depot,
+) -> Result<(), Error> {
+    let salvo_conf = depot.obtain::<Config>().unwrap();
+
+    let blog_id: String = req.try_query("blog_id").map_err(Error::err_to_client_err)?;
+
+    let comments = sql::get_comments_per_blog_id(&salvo_conf.db_conn_string, &blog_id)?;
+
+    let json: String = serde_json::to_string(&comments)?;
+
+    res.body(json);
+
+    Ok(())
+}
 
 #[tokio::main]
 async fn main() {
@@ -921,6 +938,7 @@ async fn main() {
         .get(root_handler)
         // .push(Router::with_path("debug").get(debug_handler))
         .push(Router::with_path("get_comment").get(comment_text_get))
+        .push(Router::with_path("get_comments").get(get_comments_by_blog_id))
         .push(Router::with_path("do_comment").get(login_to_comment))
         .push(Router::with_path("github_auth_make_comment").get(github_auth_make_comment))
         .push(Router::with_path("submit_comment").post(submit_comment))

@@ -21,6 +21,10 @@ use salvo::{Depot, Request, Response, Writer, async_trait};
 
 #[derive(Debug)]
 pub enum Error {
+    TimeFormat(time::error::Format),
+    TimeInvalFormat(time::error::InvalidFormatDescription),
+    TimeIndetOffset(time::error::IndeterminateOffset),
+    SerdeJson(serde_json::Error),
     SalvoHttpParse(salvo::http::ParseError),
     Reqwest(reqwest::Error),
     ParseInt(ParseIntError),
@@ -53,6 +57,10 @@ impl std::fmt::Display for Error {
             Error::Reqwest(error) => error.fmt(f),
             Error::SalvoHttpParse(error) => error.fmt(f),
             Error::ClientErr(error) => error.fmt(f),
+            Error::SerdeJson(error) => error.fmt(f),
+            Error::TimeIndetOffset(error) => error.fmt(f),
+            Error::TimeInvalFormat(error) => error.fmt(f),
+            Error::TimeFormat(error) => error.fmt(f),
         }
     }
 }
@@ -98,6 +106,30 @@ impl From<reqwest::Error> for Error {
 impl From<salvo::http::ParseError> for Error {
     fn from(value: salvo::http::ParseError) -> Self {
         Error::SalvoHttpParse(value)
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(value: serde_json::Error) -> Self {
+        Error::SerdeJson(value)
+    }
+}
+
+impl From<time::error::IndeterminateOffset> for Error {
+    fn from(value: time::error::IndeterminateOffset) -> Self {
+        Error::TimeIndetOffset(value)
+    }
+}
+
+impl From<time::error::InvalidFormatDescription> for Error {
+    fn from(value: time::error::InvalidFormatDescription) -> Self {
+        Error::TimeInvalFormat(value)
+    }
+}
+
+impl From<time::error::Format> for Error {
+    fn from(value: time::error::Format) -> Self {
+        Error::TimeFormat(value)
     }
 }
 
