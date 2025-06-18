@@ -421,18 +421,8 @@ async fn github_auth_make_comment(
         .await?;
 
     let resp_body: String = g_res.text().await?;
-    eprintln!("{:?}", &resp_body);
-    let mut no_first_line: String = String::new();
-    let mut first = true;
-    for line in resp_body.lines() {
-        if first {
-            first = false;
-        } else {
-            no_first_line.push_str(line);
-        }
-    }
 
-    let json: serde_json::Value = serde_json::Value::from_str(&no_first_line)?;
+    let json: serde_json::Value = serde_json::Value::from_str(&resp_body)?;
     let access_token = json.get("access_token").ok_or(error::Error::from(
         "Failed to parse access_token from response from Github!",
     ))?;
