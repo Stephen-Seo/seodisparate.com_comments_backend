@@ -17,7 +17,6 @@
 mod arg_parse;
 mod config;
 mod error;
-mod helper;
 mod sql;
 
 use error::Error;
@@ -334,13 +333,12 @@ async fn login_to_comment(
         &[("blog_id", blog_id), ("blog_url", blog_url)],
     )
     .map_err(|_| error::Error::from("Failed to parse redirect url!"))?;
-    let redirect_url_escaped = helper::percent_escape_uri(redirect_url.as_str());
     let github_api_url = Url::parse_with_params(
         "https://github.com/login/oauth/authorize",
         &[
             ("client_id", salvo_conf.oauth_user.as_str()),
             ("state", uuid.as_str()),
-            ("redirect_uri", redirect_url_escaped.as_str()),
+            ("redirect_uri", redirect_url.as_str()),
         ],
     )
     .map_err(|_| error::Error::from("Failed to parse github api url!"))?;
@@ -406,7 +404,6 @@ async fn github_auth_make_comment(
         &[("blog_id", &blog_id), ("blog_url", &blog_url)],
     )
     .map_err(|_| error::Error::from("Failed to parse redirect url!"))?;
-    let redirect_url_escaped = helper::percent_escape_uri(redirect_url.as_str());
 
     let client = reqwest::Client::new();
     let g_res = client
@@ -415,7 +412,7 @@ async fn github_auth_make_comment(
             ("client_id", salvo_conf.oauth_user.as_str()),
             ("client_secret", salvo_conf.oauth_token.as_str()),
             ("code", code.as_str()),
-            ("redirect_uri", redirect_url_escaped.as_str()),
+            ("redirect_uri", redirect_url.as_str()),
         ])
         .header("Accept", "application/json")
         .send()
@@ -536,13 +533,12 @@ async fn login_to_edit_comment(
         &[("comment_id", comment_id), ("blog_url", blog_url)],
     )
     .map_err(|_| error::Error::from("Failed to parse redirect url!"))?;
-    let redirect_url_escaped = helper::percent_escape_uri(redirect_url.as_str());
     let github_api_url = Url::parse_with_params(
         "https://github.com/login/oauth/authorize",
         &[
             ("client_id", salvo_conf.oauth_user.as_str()),
             ("state", uuid.as_str()),
-            ("redirect_uri", redirect_url_escaped.as_str()),
+            ("redirect_uri", redirect_url.as_str()),
         ],
     )
     .map_err(|_| error::Error::from("Failed to parse github api url!"))?;
@@ -607,7 +603,6 @@ async fn github_auth_edit_comment(
         &[("comment_id", &comment_id)],
     )
     .map_err(|_| error::Error::from("Failed to parse redirect url!"))?;
-    let redirect_url_escaped = helper::percent_escape_uri(redirect_url.as_str());
 
     let client = reqwest::Client::new();
     let g_res = client
@@ -616,7 +611,7 @@ async fn github_auth_edit_comment(
             ("client_id", salvo_conf.oauth_user.as_str()),
             ("client_secret", salvo_conf.oauth_token.as_str()),
             ("code", code.as_str()),
-            ("redirect_uri", redirect_url_escaped.as_str()),
+            ("redirect_uri", redirect_url.as_str()),
         ])
         .header("Accept", "application/json")
         .send()
@@ -755,13 +750,12 @@ async fn login_to_delete_comment(
         &[("comment_id", comment_id), ("blog_url", blog_url)],
     )
     .map_err(|_| error::Error::from("Failed to parse redirect url!"))?;
-    let redirect_url_escaped = helper::percent_escape_uri(redirect_url.as_str());
     let github_api_url = Url::parse_with_params(
         "https://github.com/login/oauth/authorize",
         &[
             ("client_id", salvo_conf.oauth_user.as_str()),
             ("state", uuid.as_str()),
-            ("redirect_uri", redirect_url_escaped.as_str()),
+            ("redirect_uri", redirect_url.as_str()),
         ],
     )
     .map_err(|_| error::Error::from("Failed to parse github api url!"))?;
@@ -826,7 +820,6 @@ async fn github_auth_del_comment(
         &[("comment_id", &comment_id), ("blog_url", &blog_url)],
     )
     .map_err(|_| error::Error::from("Failed to parse redirect url!"))?;
-    let redirect_url_escaped = helper::percent_escape_uri(redirect_url.as_str());
 
     let client = reqwest::Client::new();
     let g_res = client
@@ -835,7 +828,7 @@ async fn github_auth_del_comment(
             ("client_id", salvo_conf.oauth_user.as_str()),
             ("client_secret", salvo_conf.oauth_token.as_str()),
             ("code", code.as_str()),
-            ("redirect_uri", redirect_url_escaped.as_str()),
+            ("redirect_uri", redirect_url.as_str()),
         ])
         .header("Accept", "application/json")
         .send()
