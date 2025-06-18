@@ -19,8 +19,6 @@ mod config;
 mod error;
 mod sql;
 
-use std::str::FromStr;
-
 use error::Error;
 use reqwest::Url;
 use salvo::prelude::*;
@@ -340,6 +338,7 @@ async fn login_to_comment(
         &[
             ("client_id", salvo_conf.oauth_user.as_str()),
             ("state", uuid.as_str()),
+            ("scope", "user:read"),
             ("redirect_uri", redirect_url.as_str()),
         ],
     )
@@ -420,9 +419,7 @@ async fn github_auth_make_comment(
         .send()
         .await?;
 
-    let resp_body: String = g_res.text().await?;
-
-    let json: serde_json::Value = serde_json::Value::from_str(&resp_body)?;
+    let json: serde_json::Value = g_res.json().await?;
     let access_token = json.get("access_token").ok_or(error::Error::from(
         "Failed to parse access_token from response from Github!",
     ))?;
@@ -437,14 +434,18 @@ async fn github_auth_make_comment(
         ));
         return Ok(());
     }
-    let access_token: String = access_token.to_string();
+    let access_token_str: &str = access_token
+        .as_str()
+        .ok_or(Error::from("Github access_token was not a string!"))?;
+    eprintln!("DEBUG: Access token: {}", access_token_str);
     let user_info = client
         .get("https://api.github.com/user")
         .header("Accept", "application/vnd.github+json")
-        .header("Authorization", format!("Bearer {}", access_token))
+        .header("Authorization", format!("Bearer {}", access_token_str))
         .header("X-Github-Api-Version", "2022-11-28")
         .send()
         .await?;
+    eprintln!("DEBUG: {:?}", user_info);
     let user_info: serde_json::Value = user_info.json().await?;
 
     let user_id: u64 = user_info
@@ -542,6 +543,7 @@ async fn login_to_edit_comment(
         &[
             ("client_id", salvo_conf.oauth_user.as_str()),
             ("state", uuid.as_str()),
+            ("scope", "user:read"),
             ("redirect_uri", redirect_url.as_str()),
         ],
     )
@@ -759,6 +761,7 @@ async fn login_to_delete_comment(
         &[
             ("client_id", salvo_conf.oauth_user.as_str()),
             ("state", uuid.as_str()),
+            ("scope", "user:read"),
             ("redirect_uri", redirect_url.as_str()),
         ],
     )
