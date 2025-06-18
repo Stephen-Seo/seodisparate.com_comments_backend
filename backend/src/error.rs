@@ -104,6 +104,7 @@ impl From<salvo::http::ParseError> for Error {
 #[async_trait]
 impl Writer for Error {
     async fn write(self, _req: &mut Request, _depot: &mut Depot, res: &mut Response) {
+        eprintln!("{:?}", &self);
         match &self {
             Error::ClientErr(_error) => {
                 res.status_code(StatusCode::BAD_REQUEST);

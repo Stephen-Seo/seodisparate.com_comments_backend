@@ -14,6 +14,9 @@
 // OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 // PERFORMANCE OF THIS SOFTWARE.
 
+use std::thread::sleep;
+use std::time::Duration;
+
 use crate::error::Error;
 use mysql::prelude::*;
 use mysql::*;
@@ -53,11 +56,13 @@ pub fn set_up_sql_db(conn_str: &str) -> Result<(), Error> {
     conn.query_drop(
         r"CREATE TABLE IF NOT EXISTS PSEUDO_COMMENT (
             uuid CHAR(36) PRIMARY KEY,
+            state CHAR(36) NOT NULL UNIQUE,
             user_id BIGINT NOT NULL,
             username TINYTEXT NOT NULL,
             userurl TINYTEXT NOT NULL,
             useravatar TINYTEXT NOT NULL,
-            blog_post_id TINYTEXT NOT NULL,
+            blog_post_id TINYTEXT,
+            comment_id TINYTEXT,
             date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             date2 DATETIME NOT NULL DEFAULT ADDTIME(CURRENT_TIMESTAMP, '00:00:01'),
             PERIOD FOR date_period(date, date2)
@@ -76,6 +81,15 @@ pub fn set_up_sql_db(conn_str: &str) -> Result<(), Error> {
     Ok(())
 }
 
+pub fn has_psuedo_commment_with_state(conn: &mut PooledConn, state: &str) -> Result<bool, Error> {
+    Ok(conn
+        .exec_first::<String, &'static str, (&str,)>(
+            "SELECT state FROM PSEUDO_COMMENT WHERE state = ?",
+            (state,),
+        )?
+        .is_some())
+}
+
 pub fn create_rng_uuid(conn_str: &str) -> Result<String, Error> {
     let pool = Pool::new(conn_str)?;
 
@@ -84,10 +98,15 @@ pub fn create_rng_uuid(conn_str: &str) -> Result<String, Error> {
     conn.query_drop(
         r"DELETE FROM GITHUB_RNG
         FOR PORTION OF date_period
-        FROM '0-0-0' TO SUBDATE(CURRENT_TIMESTAMP, INTERVAL 30 MINUTE))",
+        FROM '0-0-0' TO SUBDATE(CURRENT_TIMESTAMP, INTERVAL 60 MINUTE))",
     )?;
 
-    let rng_uuid = uuid::Uuid::new_v4();
+    let mut rng_uuid = uuid::Uuid::new_v4();
+
+    while has_psuedo_commment_with_state(&mut conn, &rng_uuid.to_string())? {
+        rng_uuid = uuid::Uuid::new_v4();
+    }
+
     let rng_uuid_string = rng_uuid.to_string();
 
     conn.exec_drop(
@@ -98,10 +117,33 @@ pub fn create_rng_uuid(conn_str: &str) -> Result<String, Error> {
     Ok(rng_uuid_string)
 }
 
+pub fn check_rng_uuid(conn_str: &str, uuid: &str) -> Result<bool, Error> {
+    let pool = Pool::new(conn_str)?;
+
+    let mut conn = pool.get_conn()?;
+
+    conn.query_drop(
+        r"DELETE FROM GITHUB_RNG
+        FOR PORTION OF date_period
+        FROM '0-0-0' TO SUBDATE(CURRENT_TIMESTAMP, INTERVAL 60 MINUTE))",
+    )?;
+
+    let ret: Option<String> =
+        conn.exec_first(r"SELECT uuid FROM GITHUB_RNG WHERE uuid = ?", (uuid,))?;
+
+    Ok(ret.is_some())
+}
+
 pub fn check_remove_rng_uuid(conn_str: &str, uuid: &str) -> Result<bool, Error> {
     let pool = Pool::new(conn_str)?;
 
     let mut conn = pool.get_conn()?;
+
+    conn.query_drop(
+        r"DELETE FROM GITHUB_RNG
+        FOR PORTION OF date_period
+        FROM '0-0-0' TO SUBDATE(CURRENT_TIMESTAMP, INTERVAL 60 MINUTE))",
+    )?;
 
     let ret: Option<String> =
         conn.exec_first(r"SELECT uuid FROM GITHUB_RNG WHERE uuid = ?", (uuid,))?;
@@ -115,13 +157,14 @@ pub fn check_remove_rng_uuid(conn_str: &str, uuid: &str) -> Result<bool, Error> 
 
 pub fn add_pseudo_comment_data(
     conn_str: &str,
-    uuid: &str,
+    state: &str,
     user_id: u64,
     user_name: &str,
     user_url: &str,
     user_avatar_url: &str,
-    blog_post_id: &str,
-) -> Result<(), Error> {
+    blog_post_id: Option<&str>,
+    comment_id: Option<&str>,
+) -> Result<String, Error> {
     let pool = Pool::new(conn_str)?;
 
     let mut conn = pool.get_conn()?;
@@ -132,9 +175,23 @@ pub fn add_pseudo_comment_data(
         FROM '0-0-0' TO SUBDATE(CURRENT_TIMESTAMP, INTERVAL 60 MINUTE))",
     )?;
 
-    conn.exec_drop(r"INSERT INTO PSEUDO_COMMENT (uuid, user_id, username, userurl, useravatar, blog_post_id) VALUES (?, ?, ?, ?, ?)", (uuid, user_id, user_name, user_url, user_avatar_url, blog_post_id))?;
+    let uuid_string: String;
 
-    Ok(())
+    loop {
+        let uuid = uuid::Uuid::new_v4();
+        let row_opt: Option<Row> = conn.exec_first(
+            "SELECT uuid FROM PSEUDO_COMMENT WHERE uuid = ?",
+            (uuid.to_string(),),
+        )?;
+        if row_opt.is_none() {
+            uuid_string = uuid.to_string();
+            break;
+        }
+    }
+
+    conn.exec_drop(r"INSERT INTO PSEUDO_COMMENT (uuid, state, user_id, username, userurl, useravatar, blog_post_id, comment_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (&uuid_string, state, user_id, user_name, user_url, user_avatar_url, blog_post_id, comment_id))?;
+
+    Ok(uuid_string)
 }
 
 pub fn add_comment(conn_str: &str, state: &str, comment: &str) -> Result<(), Error> {
@@ -143,7 +200,7 @@ pub fn add_comment(conn_str: &str, state: &str, comment: &str) -> Result<(), Err
     let mut conn = pool.get_conn()?;
 
     let pseudo_comment = conn.exec_map(
-        "SELECT user_id, username, userurl, useravatar, blog_post_id FROM PSEUDO_COMMENT WHERE uuid = ?",
+        "SELECT user_id, username, userurl, useravatar, blog_post_id FROM PSEUDO_COMMENT WHERE state = ?",
         (state,),
         |(user_id, username, userurl, useravatar, blog_post_id)| PseudoComment {
             user_id,
@@ -155,7 +212,9 @@ pub fn add_comment(conn_str: &str, state: &str, comment: &str) -> Result<(), Err
     )?;
 
     if pseudo_comment.is_empty() {
-        return Err(Error::from("Commentor not authenticated or timed out!"));
+        return Err(Error::from(
+            "PsuedoComment not found, Commentor not authenticated or timed out!",
+        ));
     }
 
     let mut combined: String = pseudo_comment[0].blog_post_id.clone();
@@ -164,12 +223,95 @@ pub fn add_comment(conn_str: &str, state: &str, comment: &str) -> Result<(), Err
     combined.push_str(&utc_time.to_string());
 
     let namespace = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_DNS, "seodisparate.com".as_bytes());
-    let uuid = uuid::Uuid::new_v5(&namespace, combined.as_bytes());
-    let uuid_str = uuid.to_string();
+    let mut uuid = uuid::Uuid::new_v5(&namespace, combined.as_bytes());
+    let mut uuid_str = uuid.to_string();
+
+    loop {
+        let row_opt: Option<Row> =
+            conn.exec_first("SELECT uuid FROM COMMENT WHERE uuid = ?", (&uuid_str,))?;
+        if row_opt.is_some() {
+            sleep(Duration::from_secs(1));
+            let utc_time = UtcDateTime::now();
+            combined = pseudo_comment[0].blog_post_id.clone();
+            combined.push_str(&pseudo_comment[0].user_id.to_string());
+            combined.push_str(&utc_time.to_string());
+            uuid = uuid::Uuid::new_v5(&namespace, combined.as_bytes());
+            uuid_str = uuid.to_string();
+        } else {
+            break;
+        }
+    }
 
     conn.exec_drop("INSERT INTO COMMENT (uuid, blog_post_id, user_id, username, userurl, useravatar, comment) VALUES (?, ?, ?, ?, ?, ?)", (uuid_str, &pseudo_comment[0].blog_post_id, pseudo_comment[0].user_id, &pseudo_comment[0].username, &pseudo_comment[0].userurl, &pseudo_comment[0].useravatar, comment))?;
 
-    conn.exec_drop("DELETE FROM PSEUDO_COMMENT WHERE uuid = ?", (state,))?;
+    conn.exec_drop("DELETE FROM PSEUDO_COMMENT WHERE state = ?", (state,))?;
+
+    Ok(())
+}
+
+pub fn check_edit_comment_auth(conn_str: &str, cid: &str, uid: &str) -> Result<bool, Error> {
+    let pool = Pool::new(conn_str)?;
+
+    let mut conn = pool.get_conn()?;
+
+    let row_opt: Option<Row> = conn.exec_first(
+        "SELECT uuid FROM COMMENT WHERE uuid = ? AND user_id = ?",
+        (cid, uid),
+    )?;
+
+    Ok(row_opt.is_some())
+}
+
+pub fn get_comment_text(conn_str: &str, cid: &str) -> Result<String, Error> {
+    let pool = Pool::new(conn_str)?;
+
+    let mut conn = pool.get_conn()?;
+
+    let mut row: Row = conn
+        .exec_first("SELECT comment from COMMENT WHERE uuid = ?", (cid,))?
+        .ok_or(Error::from("Editing comment: Comment not found!"))?;
+
+    row.take::<String, usize>(0).ok_or(Error::from(
+        "Editing comment: Comment failed to convert to String!",
+    ))
+}
+
+pub fn edit_comment(conn_str: &str, state: &str, comment: &str) -> Result<(), Error> {
+    let pool = Pool::new(conn_str)?;
+
+    let mut conn = pool.get_conn()?;
+
+    let pseudo_comment = conn.exec_map(
+        "SELECT user_id, username, userurl, useravatar, blog_post_id FROM PSEUDO_COMMENT WHERE state = ?",
+        (state,),
+        |(user_id, username, userurl, useravatar, blog_post_id)| PseudoComment {
+            user_id,
+            username,
+            userurl,
+            useravatar,
+            blog_post_id,
+        },
+    )?;
+
+    if pseudo_comment.is_empty() {
+        return Err(Error::from(
+            "PsuedoComment not found, Commentor not authenticated or timed out!",
+        ));
+    }
+
+    conn.exec_drop("UPDATE COMMENT SET username = ?, userurl = ?, useravatar = ?, edit_date = CURRENT_TIMESTAMP, comment = ?", (&pseudo_comment[0].username, &pseudo_comment[0].userurl, &pseudo_comment[0].useravatar, comment))?;
+
+    conn.exec_drop("DELETE FROM PSEUDO_COMMENT WHERE state = ?", (state,))?;
+
+    Ok(())
+}
+
+pub fn try_delete_comment(conn_str: &str, cid: &str, uid: u64) -> Result<(), Error> {
+    let pool = Pool::new(conn_str)?;
+
+    let mut conn = pool.get_conn()?;
+
+    conn.exec_drop("DELETE FROM COMMENT WHERE uuid = ?, uid = ?", (cid, uid))?;
 
     Ok(())
 }
