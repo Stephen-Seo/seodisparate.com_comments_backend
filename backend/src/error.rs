@@ -21,6 +21,8 @@ use salvo::{Depot, Request, Response, Writer, async_trait};
 
 #[derive(Debug)]
 pub enum Error {
+    StrUtf8(std::str::Utf8Error),
+    Curl(curl::Error),
     TimeFormat(time::error::Format),
     TimeInvalFormat(time::error::InvalidFormatDescription),
     TimeIndetOffset(time::error::IndeterminateOffset),
@@ -61,6 +63,8 @@ impl std::fmt::Display for Error {
             Error::TimeIndetOffset(error) => error.fmt(f),
             Error::TimeInvalFormat(error) => error.fmt(f),
             Error::TimeFormat(error) => error.fmt(f),
+            Error::Curl(error) => error.fmt(f),
+            Error::StrUtf8(error) => error.fmt(f),
         }
     }
 }
@@ -130,6 +134,18 @@ impl From<time::error::InvalidFormatDescription> for Error {
 impl From<time::error::Format> for Error {
     fn from(value: time::error::Format) -> Self {
         Error::TimeFormat(value)
+    }
+}
+
+impl From<curl::Error> for Error {
+    fn from(value: curl::Error) -> Self {
+        Error::Curl(value)
+    }
+}
+
+impl From<std::str::Utf8Error> for Error {
+    fn from(value: std::str::Utf8Error) -> Self {
+        Error::StrUtf8(value)
     }
 }
 
