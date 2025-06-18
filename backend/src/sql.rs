@@ -121,7 +121,7 @@ pub fn create_rng_uuid(conn_str: &str) -> Result<String, Error> {
     conn.query_drop(
         r"DELETE FROM GITHUB_RNG
         FOR PORTION OF date_period
-        FROM '0-0-0' TO SUBDATE(CURRENT_TIMESTAMP, INTERVAL 60 MINUTE))",
+        FROM '0-0-0' TO SUBDATE(CURRENT_TIMESTAMP, INTERVAL 60 MINUTE)",
     )?;
 
     let mut rng_uuid = uuid::Uuid::new_v4();
@@ -148,7 +148,7 @@ pub fn check_rng_uuid(conn_str: &str, uuid: &str) -> Result<bool, Error> {
     conn.query_drop(
         r"DELETE FROM GITHUB_RNG
         FOR PORTION OF date_period
-        FROM '0-0-0' TO SUBDATE(CURRENT_TIMESTAMP, INTERVAL 60 MINUTE))",
+        FROM '0-0-0' TO SUBDATE(CURRENT_TIMESTAMP, INTERVAL 60 MINUTE)",
     )?;
 
     let ret: Option<String> =
@@ -165,7 +165,7 @@ pub fn check_remove_rng_uuid(conn_str: &str, uuid: &str) -> Result<bool, Error> 
     conn.query_drop(
         r"DELETE FROM GITHUB_RNG
         FOR PORTION OF date_period
-        FROM '0-0-0' TO SUBDATE(CURRENT_TIMESTAMP, INTERVAL 60 MINUTE))",
+        FROM '0-0-0' TO SUBDATE(CURRENT_TIMESTAMP, INTERVAL 60 MINUTE)",
     )?;
 
     let ret: Option<String> =
@@ -195,7 +195,7 @@ pub fn add_pseudo_comment_data(
     conn.query_drop(
         r"DELETE FROM PSEUDO_COMMENT
         FOR PORTION OF date_period
-        FROM '0-0-0' TO SUBDATE(CURRENT_TIMESTAMP, INTERVAL 60 MINUTE))",
+        FROM '0-0-0' TO SUBDATE(CURRENT_TIMESTAMP, INTERVAL 60 MINUTE)",
     )?;
 
     let uuid_string: String;
@@ -334,7 +334,10 @@ pub fn try_delete_comment(conn_str: &str, cid: &str, uid: u64) -> Result<(), Err
 
     let mut conn = pool.get_conn()?;
 
-    conn.exec_drop("DELETE FROM COMMENT WHERE uuid = ?, uid = ?", (cid, uid))?;
+    conn.exec_drop(
+        "DELETE FROM COMMENT WHERE uuid = ?, user_id = ?",
+        (cid, uid),
+    )?;
 
     Ok(())
 }
