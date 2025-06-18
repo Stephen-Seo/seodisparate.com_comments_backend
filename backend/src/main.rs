@@ -338,7 +338,7 @@ async fn login_to_comment(
         &[
             ("client_id", salvo_conf.oauth_user.as_str()),
             ("state", uuid.as_str()),
-            ("scope", "user:read"),
+            // ("scope", "read:user"),
             ("redirect_uri", redirect_url.as_str()),
         ],
     )
@@ -432,10 +432,9 @@ async fn github_auth_make_comment(
         // .header("Accept", "application/vnd.github+json")
         .header("Accept", "application/json")
         .header("Authorization", format!("Bearer {}", access_token_str))
-        .header("X-Github-Api-Version", "2022-11-28")
-        .send()
-        .await?
-        .error_for_status()?;
+        .header("X-Github-Api-Version", "2022-11-28");
+    eprintln!("DEBUG: RequestBuilder: {:?}", user_info);
+    let user_info = user_info.send().await?.error_for_status()?;
     // eprintln!("DEBUG: {:?}", user_info);
     let user_info: serde_json::Value = user_info.json().await?;
 
@@ -534,7 +533,7 @@ async fn login_to_edit_comment(
         &[
             ("client_id", salvo_conf.oauth_user.as_str()),
             ("state", uuid.as_str()),
-            ("scope", "user:read"),
+            // ("scope", "read:user"),
             ("redirect_uri", redirect_url.as_str()),
         ],
     )
@@ -745,7 +744,7 @@ async fn login_to_delete_comment(
         &[
             ("client_id", salvo_conf.oauth_user.as_str()),
             ("state", uuid.as_str()),
-            ("scope", "user:read"),
+            // ("scope", "read:user"),
             ("redirect_uri", redirect_url.as_str()),
         ],
     )
