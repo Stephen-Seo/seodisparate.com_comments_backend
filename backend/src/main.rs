@@ -329,10 +329,10 @@ async fn login_to_comment(
         return Ok(());
     }
     let uuid = sql::create_rng_uuid(&salvo_conf.db_conn_string)?;
-    let redirect_url = Url::parse_with_params(
-        &format!("{}/github_auth_make_comment", salvo_conf.base_url),
-        &[("blog_id", blog_id), ("blog_url", blog_url)],
-    )
+    let redirect_url = Url::parse(&format!(
+        "{}/github_auth_make_comment/{}/{}/",
+        salvo_conf.base_url, &blog_id, &blog_url
+    ))
     .map_err(|_| error::Error::from("Failed to parse redirect url!"))?;
     let redirect_url_escaped = helper::percent_escape_uri(redirect_url.as_str());
     let github_api_url = Url::parse_with_params(
@@ -374,10 +374,10 @@ async fn github_auth_make_comment(
     depot: &mut Depot,
 ) -> Result<(), error::Error> {
     let blog_id: String = req
-        .try_query("blog_id")
+        .try_param("blog_id")
         .map_err(error::Error::err_to_client_err)?;
     let blog_url: String = req
-        .try_query("blog_url")
+        .try_param("blog_url")
         .map_err(error::Error::err_to_client_err)?;
     let state: String = req
         .try_query("state")
@@ -401,10 +401,10 @@ async fn github_auth_make_comment(
         return Ok(());
     }
 
-    let redirect_url = Url::parse_with_params(
-        &format!("{}/github_auth_make_comment", salvo_conf.base_url),
-        &[("blog_id", &blog_id), ("blog_url", &blog_url)],
-    )
+    let redirect_url = Url::parse(&format!(
+        "{}/github_auth_make_comment/{}/{}/",
+        salvo_conf.base_url, &blog_id, &blog_url
+    ))
     .map_err(|_| error::Error::from("Failed to parse redirect url!"))?;
     let redirect_url_escaped = helper::percent_escape_uri(redirect_url.as_str());
 
@@ -940,7 +940,10 @@ async fn main() {
         .push(Router::with_path("get_comment").get(comment_text_get))
         .push(Router::with_path("get_comments").get(get_comments_by_blog_id))
         .push(Router::with_path("do_comment").get(login_to_comment))
-        .push(Router::with_path("github_auth_make_comment").get(github_auth_make_comment))
+        .push(
+            Router::with_path("github_auth_make_comment/{blog_id}/{blog_url}/")
+                .get(github_auth_make_comment),
+        )
         .push(Router::with_path("submit_comment").post(submit_comment))
         .push(Router::with_path("edit_comment").get(login_to_edit_comment))
         .push(Router::with_path("github_auth_edit_comment").get(github_auth_edit_comment))
