@@ -52,6 +52,7 @@ struct PseudoComment {
     userurl: String,
     useravatar: String,
     blog_post_id: String,
+    comment_id: String,
 }
 
 pub fn set_up_sql_db(conn_str: &str) -> Result<(), Error> {
@@ -231,6 +232,7 @@ pub fn add_comment(conn_str: &str, state: &str, comment: &str) -> Result<(), Err
             userurl,
             useravatar,
             blog_post_id,
+            comment_id: String::new(),
         },
     )?;
 
@@ -305,14 +307,15 @@ pub fn edit_comment(conn_str: &str, state: &str, comment: &str) -> Result<(), Er
     let mut conn = pool.get_conn()?;
 
     let pseudo_comment = conn.exec_map(
-        "SELECT user_id, username, userurl, useravatar FROM PSEUDO_COMMENT WHERE state = ?",
+        "SELECT user_id, username, userurl, useravatar, comment_id FROM PSEUDO_COMMENT WHERE state = ?",
         (state,),
-        |(user_id, username, userurl, useravatar)| PseudoComment {
+        |(user_id, username, userurl, useravatar, comment_id)| PseudoComment {
             user_id,
             username,
             userurl,
             useravatar,
             blog_post_id: String::new(),
+            comment_id,
         },
     )?;
 
@@ -322,7 +325,7 @@ pub fn edit_comment(conn_str: &str, state: &str, comment: &str) -> Result<(), Er
         ));
     }
 
-    conn.exec_drop("UPDATE COMMENT SET username = ?, userurl = ?, useravatar = ?, edit_date = CURRENT_TIMESTAMP, comment = ?", (&pseudo_comment[0].username, &pseudo_comment[0].userurl, &pseudo_comment[0].useravatar, comment))?;
+    conn.exec_drop("UPDATE COMMENT SET username = ?, userurl = ?, useravatar = ?, edit_date = CURRENT_TIMESTAMP, comment = ? WHERE uuid = ?", (&pseudo_comment[0].username, &pseudo_comment[0].userurl, &pseudo_comment[0].useravatar, comment, &pseudo_comment[0].comment_id))?;
 
     conn.exec_drop("DELETE FROM PSEUDO_COMMENT WHERE state = ?", (state,))?;
 
