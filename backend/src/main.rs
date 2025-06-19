@@ -182,6 +182,7 @@ struct Config {
     allowed_urls: Vec<String>,
     allowed_bids: Vec<String>,
     user_agent: String,
+    on_comment_cmds: Vec<String>,
 }
 
 #[handler]
@@ -460,6 +461,15 @@ async fn submit_comment(req: &mut Request, depot: &mut Depot) -> Result<(), Erro
     let salvo_conf = depot.obtain::<Config>().unwrap();
 
     sql::add_comment(&salvo_conf.db_conn_string, req_state, req_comment)?;
+
+    for cmd in &salvo_conf.on_comment_cmds {
+        let cmd_res = std::process::Command::new("/usr/bin/sh")
+            .args(["-c", cmd])
+            .output();
+        if cmd_res.is_err() {
+            eprintln!("On comment: Failed to execute: {}", cmd);
+        }
+    }
 
     let _did_remove = sql::check_remove_rng_uuid(&salvo_conf.db_conn_string, req_state)?;
 
@@ -933,6 +943,7 @@ async fn main() {
         allowed_urls: config.get_allowed_urls().to_vec(),
         allowed_bids: config.get_allowed_bids().to_vec(),
         user_agent: config.get_user_agent().to_owned(),
+        on_comment_cmds: config.get_on_comment_cmds().to_owned(),
     };
 
     sql::set_up_sql_db(&salvo_conf.db_conn_string).unwrap();
