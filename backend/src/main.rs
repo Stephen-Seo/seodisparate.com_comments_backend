@@ -921,6 +921,27 @@ async fn github_auth_del_comment(
         .to_string()
         .parse()?;
 
+    let can_del: bool = sql::check_edit_comment_auth(
+        &salvo_conf.db_conn_string,
+        &comment_id,
+        &user_id.to_string(),
+    )?;
+    if !can_del {
+        eprintln!(
+            "User tried to delete comment they didn't make! {}",
+            &comment_id
+        );
+        res.status_code(StatusCode::BAD_REQUEST);
+        res.body(format!(
+            r#"<html><head><style>{}</style></head><body>
+            <b>Bad Request</b><br>
+            <p>You are not the commentor of the comment you are trying to edit.</p>
+            </body></html>"#,
+            COMMON_CSS,
+        ));
+        return Ok(());
+    }
+
     sql::try_delete_comment(&salvo_conf.db_conn_string, &comment_id, user_id)?;
 
     let _did_remove = sql::check_remove_rng_uuid(&salvo_conf.db_conn_string, &state)?;
