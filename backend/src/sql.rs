@@ -46,13 +46,13 @@ struct PreProcessedComment {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct PseudoComment {
-    user_id: u64,
-    username: String,
-    userurl: String,
-    useravatar: String,
-    blog_post_id: String,
-    comment_id: String,
+pub struct PseudoComment {
+    pub user_id: u64,
+    pub username: String,
+    pub userurl: String,
+    pub useravatar: String,
+    pub blog_post_id: String,
+    pub comment_id: String,
 }
 
 pub fn set_up_sql_db(conn_str: &str) -> Result<(), Error> {
@@ -218,7 +218,7 @@ pub fn add_pseudo_comment_data(
     Ok(uuid_string)
 }
 
-pub fn add_comment(conn_str: &str, state: &str, comment: &str) -> Result<String, Error> {
+pub fn add_comment(conn_str: &str, state: &str, comment: &str) -> Result<PseudoComment, Error> {
     let pool = Pool::new(conn_str)?;
 
     let mut conn = pool.get_conn()?;
@@ -271,7 +271,7 @@ pub fn add_comment(conn_str: &str, state: &str, comment: &str) -> Result<String,
 
     conn.exec_drop("DELETE FROM PSEUDO_COMMENT WHERE state = ?", (state,))?;
 
-    Ok(pseudo_comment[0].blog_post_id.to_owned())
+    Ok(pseudo_comment[0].clone())
 }
 
 pub fn check_edit_comment_auth(conn_str: &str, cid: &str, uid: &str) -> Result<bool, Error> {

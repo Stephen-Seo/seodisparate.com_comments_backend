@@ -460,12 +460,14 @@ async fn submit_comment(req: &mut Request, depot: &mut Depot) -> Result<(), Erro
 
     let salvo_conf = depot.obtain::<Config>().unwrap();
 
-    let blog_id: String = sql::add_comment(&salvo_conf.db_conn_string, req_state, req_comment)?;
+    let pseudo_comment: sql::PseudoComment =
+        sql::add_comment(&salvo_conf.db_conn_string, req_state, req_comment)?;
 
     for cmd in &salvo_conf.on_comment_cmds {
         let cmd_res = std::process::Command::new("/usr/bin/sh")
             .args(["-c", cmd])
-            .env("BLOG_ID", &blog_id)
+            .env("BLOG_ID", &pseudo_comment.blog_post_id)
+            .env("USERNAME", &pseudo_comment.username)
             .output();
         if cmd_res.is_err() {
             eprintln!("On comment: Failed to execute: {}", cmd);
