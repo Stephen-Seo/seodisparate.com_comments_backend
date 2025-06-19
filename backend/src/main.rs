@@ -474,11 +474,20 @@ async fn github_auth_make_comment(
     let mut user_name: Option<&serde_json::Value> = user_info.get("name");
     let user_name_str: String;
 
-    if let Some(user_name) = user_name {
-        user_name_str = user_name
-            .as_str()
-            .ok_or(error::Error::from("Failed to parse user info name!"))?
-            .to_owned();
+    if let Some(user_name_inner) = user_name {
+        if user_name_inner.is_string() {
+            user_name_str = user_name_inner
+                .as_str()
+                .ok_or(error::Error::from("Failed to parse user info name!"))?
+                .to_owned();
+        } else {
+            user_name = user_info.get("login");
+            user_name_str = user_name
+                .ok_or(error::Error::from("User has no name or login!"))?
+                .as_str()
+                .ok_or(error::Error::from("Failed to parse user info login!"))?
+                .to_owned();
+        }
     } else {
         user_name = user_info.get("login");
         user_name_str = user_name
@@ -706,11 +715,20 @@ async fn github_auth_edit_comment(
     let mut user_name: Option<&serde_json::Value> = user_info.get("name");
     let user_name_str: String;
 
-    if let Some(user_name) = user_name {
-        user_name_str = user_name
-            .as_str()
-            .ok_or(error::Error::from("Failed to parse user info name!"))?
-            .to_owned();
+    if let Some(user_name_inner) = user_name {
+        if user_name_inner.is_string() {
+            user_name_str = user_name_inner
+                .as_str()
+                .ok_or(error::Error::from("Failed to parse user info name!"))?
+                .to_owned();
+        } else {
+            user_name = user_info.get("login");
+            user_name_str = user_name
+                .ok_or(error::Error::from("User has no name or login!"))?
+                .as_str()
+                .ok_or(error::Error::from("Failed to parse user info login!"))?
+                .to_owned();
+        }
     } else {
         user_name = user_info.get("login");
         user_name_str = user_name
