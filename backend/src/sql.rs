@@ -265,7 +265,7 @@ pub fn add_comment(conn_str: &str, state: &str, comment: &str) -> Result<(), Err
         }
     }
 
-    conn.exec_drop("INSERT INTO COMMENT (uuid, blog_post_id, user_id, username, userurl, useravatar, comment) VALUES (?, ?, ?, ?, ?, ?)", (uuid_str, &pseudo_comment[0].blog_post_id, pseudo_comment[0].user_id, &pseudo_comment[0].username, &pseudo_comment[0].userurl, &pseudo_comment[0].useravatar, comment))?;
+    conn.exec_drop("INSERT INTO COMMENT (uuid, blog_post_id, user_id, username, userurl, useravatar, comment) VALUES (?, ?, ?, ?, ?, ?, ?)", (uuid_str, &pseudo_comment[0].blog_post_id, pseudo_comment[0].user_id, &pseudo_comment[0].username, &pseudo_comment[0].userurl, &pseudo_comment[0].useravatar, comment))?;
 
     conn.exec_drop("DELETE FROM PSEUDO_COMMENT WHERE state = ?", (state,))?;
 

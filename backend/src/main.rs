@@ -432,8 +432,6 @@ async fn github_auth_make_comment(
         .await?;
 
     let json: serde_json::Value = g_res.json().await?;
-    // TODO DEBUG
-    eprintln!("Access JSON: {:?}", json);
     let access_token = json.get("access_token").ok_or(error::Error::from(
         "Failed to parse access_token from response from Github!",
     ))?;
