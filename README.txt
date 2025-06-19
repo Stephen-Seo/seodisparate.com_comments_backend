@@ -78,6 +78,16 @@ Note that if the blog_id has no comments, then the returned JSON is an empty
 array.
 
 
+================================================================================
+
+Client Endpoints
+
+================================================================================
+
+These endpoints must be accessed by the user directly, and not with a headless
+http/https request.
+
+
 Submit a comment:
 
 blog_id = blog post id (must be allowed in config)
