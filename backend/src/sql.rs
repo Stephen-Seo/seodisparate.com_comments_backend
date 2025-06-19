@@ -218,7 +218,7 @@ pub fn add_pseudo_comment_data(
     Ok(uuid_string)
 }
 
-pub fn add_comment(conn_str: &str, state: &str, comment: &str) -> Result<(), Error> {
+pub fn add_comment(conn_str: &str, state: &str, comment: &str) -> Result<String, Error> {
     let pool = Pool::new(conn_str)?;
 
     let mut conn = pool.get_conn()?;
@@ -271,7 +271,7 @@ pub fn add_comment(conn_str: &str, state: &str, comment: &str) -> Result<(), Err
 
     conn.exec_drop("DELETE FROM PSEUDO_COMMENT WHERE state = ?", (state,))?;
 
-    Ok(())
+    Ok(pseudo_comment[0].blog_post_id.to_owned())
 }
 
 pub fn check_edit_comment_auth(conn_str: &str, cid: &str, uid: &str) -> Result<bool, Error> {
