@@ -48,14 +48,14 @@ Get a single comment's text:
 
 comment_id = id string
 
-{BASE_URL}/comment_api/get_comment?comment_id=123456789012345678901234567890123456
+{BASE_URL}/get_comment?comment_id=123456789012345678901234567890123456
 
 
 Get all comments for a given blog_id:
 
 blog_id = blog post id
 
-{BASE_URL}/comment_api/get_comments?blog_id=my_other_blog_post
+{BASE_URL}/get_comments?blog_id=my_other_blog_post
 
 This returns JSON:
 
@@ -81,7 +81,7 @@ Submit a comment:
 blog_id = blog post id (must be allowed in config)
 blog_url = url to return to after submitting a comment
 
-{BASE_URL}/comment_api/do_comment?blog_id=my_blog_post&blog_url=https://example.com/my_blog
+{BASE_URL}/do_comment?blog_id=my_blog_post&blog_url=https://example.com/my_blog
 
 
 Edit a comment:
@@ -89,7 +89,7 @@ Edit a comment:
 comment_id = id of the comment to edit
 blog_url = url to return to after editing a comment
 
-{BASE_URL}/comment_api/edit_comment?comment_id=1234567890&blog_url=https://example.com/my_blog
+{BASE_URL}/edit_comment?comment_id=1234567890&blog_url=https://example.com/my_blog
 
 Note that only the user who made the comment can edit it.
 
@@ -99,6 +99,6 @@ Delete a comment:
 comment_id = id of the comment to delete
 blog_url = url to return to after deleting the comment
 
-{BASE_URL}/comment_api/del_comment?comment_id=1234567890&blog_url=https://example.com/my_blog
+{BASE_URL}/del_comment?comment_id=1234567890&blog_url=https://example.com/my_blog
 
 Note that only the user who made the comment can delete it.
