@@ -471,11 +471,22 @@ async fn github_auth_make_comment(
         .to_string()
         .parse()?;
 
-    let user_name = user_info
-        .get("name")
-        .ok_or(error::Error::from("Failed to parse user info name!"))?
-        .as_str()
-        .ok_or(error::Error::from("Failed to parse user info name!"))?;
+    let mut user_name: Option<&serde_json::Value> = user_info.get("name");
+    let user_name_str: String;
+
+    if let Some(user_name) = user_name {
+        user_name_str = user_name
+            .as_str()
+            .ok_or(error::Error::from("Failed to parse user info name!"))?
+            .to_owned();
+    } else {
+        user_name = user_info.get("login");
+        user_name_str = user_name
+            .ok_or(error::Error::from("User has no name or login!"))?
+            .as_str()
+            .ok_or(error::Error::from("Failed to parse user info login!"))?
+            .to_owned();
+    }
 
     let user_url = user_info
         .get("html_url")
@@ -497,7 +508,7 @@ async fn github_auth_make_comment(
         &salvo_conf.db_conn_string,
         &state,
         user_id,
-        user_name,
+        &user_name_str,
         user_url,
         user_avatar_url,
         Some(&blog_id),
@@ -509,7 +520,7 @@ async fn github_auth_make_comment(
             .replace("{BLOG_ID}", &blog_id)
             .replace("{COMMON_CSS}", COMMON_CSS)
             .replace("{USER_AVATAR_URL}", user_avatar_url)
-            .replace("{USER_NAME}", user_name)
+            .replace("{USER_NAME}", &user_name_str)
             .replace("{USER_PROFILE}", user_url)
             .replace("{BASE_URL}", &salvo_conf.base_url)
             .replace("{BLOG_URL}", &blog_url)
@@ -692,11 +703,22 @@ async fn github_auth_edit_comment(
         .ok_or(error::Error::from("Failed to parse user info avatar url!"))?
         .as_str()
         .ok_or(error::Error::from("Failed to parse user info avatar url!"))?;
-    let user_name = user_info
-        .get("name")
-        .ok_or(error::Error::from("Failed to parse user info name!"))?
-        .as_str()
-        .ok_or(error::Error::from("Failed to parse user info name!"))?;
+    let mut user_name: Option<&serde_json::Value> = user_info.get("name");
+    let user_name_str: String;
+
+    if let Some(user_name) = user_name {
+        user_name_str = user_name
+            .as_str()
+            .ok_or(error::Error::from("Failed to parse user info name!"))?
+            .to_owned();
+    } else {
+        user_name = user_info.get("login");
+        user_name_str = user_name
+            .ok_or(error::Error::from("User has no name or login!"))?
+            .as_str()
+            .ok_or(error::Error::from("Failed to parse user info login!"))?
+            .to_owned();
+    }
     let user_url = user_info
         .get("html_url")
         .ok_or(error::Error::from("Failed to parse user info url!"))?
@@ -728,7 +750,7 @@ async fn github_auth_edit_comment(
         &salvo_conf.db_conn_string,
         &state,
         user_id,
-        user_name,
+        &user_name_str,
         user_url,
         user_avatar,
         None,
@@ -739,7 +761,7 @@ async fn github_auth_edit_comment(
         EDIT_COMMENT_PAGE
             .replace("{COMMON_CSS}", COMMON_CSS)
             .replace("{USER_AVATAR_URL}", user_avatar)
-            .replace("{USER_NAME}", user_name)
+            .replace("{USER_NAME}", &user_name_str)
             .replace("{USER_PROFILE}", user_url)
             .replace("{BASE_URL}", &salvo_conf.base_url)
             .replace("{BLOG_URL}", &blog_url)
