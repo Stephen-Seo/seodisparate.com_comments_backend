@@ -173,87 +173,6 @@ pub const EDIT_COMMENT_PAGE: &str = r#"
     </html>
 "#;
 
-// pub const TEST_HTML: &str = r#"
-//     <!DOCTYPE html>
-//     <html lang="en">
-//     <head>
-//         <meta charset="utf-8">
-//         <title>Edit a Comment</title>
-//         <style>
-//             body {
-//                 color: #FFF;
-//                 background-color: #444;
-//             }
-//             a {
-//                 color: #8F8;
-//             }
-//             textarea {
-//                 color: #FFF;
-//                 background-color: #222;
-//             }
-//             button {
-//                 color: #FFF;
-//                 background-color: #333;
-//             }
-//         </style>
-//     </head>
-//     <body>
-//         <h1>Edit a Comment</h1>
-//         <div>
-//             <p>Note that this site reserves the right to delete any comment on
-//             the grounds that it is spam/hateful/etc. Please use common sense,
-//             and please be courteous to others, even when contrary.</p>
-//             <p>You can edit/delete your comment after editing it.</p>
-//         </div><br>
-//         <img width="64" height="64" src="https://avatars.githubusercontent.com/u/4219090?v=4" /> <b>{USER_NAME}</b> <a href="https://github.com/Stephen-Seo">(User Profile)</a><br>
-//         <textarea id="comment_text" name="comment_text" rows="10" cols="50" autofocus=true maxlength="65000">Loading...</textarea><br>
-//         <button id="comment_submit_button">Submit</button>
-//         <script>
-//             "use strict;"
-
-//             async function populate_textarea(ta, cid) {
-//                 const response = await fetch("http://127.0.0.1:9090/get_comment?comment_id=" + cid);
-//                 if (response.ok) {
-//                     ta.value = await response.text();
-//                 } else {
-//                     ta.value = "Error: Failed to load comment!";
-//                 }
-//             }
-
-//             async function submit_comment(json) {
-//                 const response = await fetch("{BASE_URL}/submit_edit_comment",
-//                     {
-//                         method: "POST",
-//                         body: json,
-//                     }
-//                 );
-//                 if (!response.ok) {
-//                     throw new Error(`Response status: ${response.status}`);
-//                 } else {
-//                     window.location = "{BLOG_URL}";
-//                 }
-//             }
-
-//             window.addEventListener("load", (event) => {
-//                 let button = document.getElementById("comment_submit_button");
-//                 let textarea = document.getElementById("comment_text");
-
-//                 populate_textarea(textarea, "123456789012345678901234567890123456");
-
-//                 //button.addEventListener("click", (e) => {
-//                 //    let submit_obj = {};
-//                 //    submit_obj.comment_text = textarea.value;
-//                 //    submit_obj.state = "{STATE_STRING}";
-//                 //    submit_obj.uid = "{USER_ID}";
-//                 //    let submit_json = JSON.stringify(submit_obj);
-//                 //    submit_comment(submit_json);
-//                 //});
-//             });
-//         </script>
-//     </body>
-//     </html>
-// "#;
-
 #[derive(Default, Clone, Debug)]
 struct Config {
     db_conn_string: String,
@@ -264,11 +183,6 @@ struct Config {
     allowed_bids: Vec<String>,
     user_agent: String,
 }
-
-// #[handler]
-// async fn debug_handler(res: &mut Response) {
-//     res.body(TEST_HTML);
-// }
 
 #[handler]
 async fn root_handler(res: &mut Response) {
@@ -348,7 +262,6 @@ async fn login_to_comment(
         &[
             ("client_id", salvo_conf.oauth_user.as_str()),
             ("state", uuid.as_str()),
-            // ("scope", "read:user"),
             ("redirect_uri", redirect_url.as_str()),
         ],
     )
@@ -587,7 +500,6 @@ async fn login_to_edit_comment(
         &[
             ("client_id", salvo_conf.oauth_user.as_str()),
             ("state", uuid.as_str()),
-            // ("scope", "read:user"),
             ("redirect_uri", redirect_url.as_str()),
         ],
     )
@@ -840,7 +752,6 @@ async fn login_to_delete_comment(
         &[
             ("client_id", salvo_conf.oauth_user.as_str()),
             ("state", uuid.as_str()),
-            // ("scope", "read:user"),
             ("redirect_uri", redirect_url.as_str()),
         ],
     )
@@ -1047,7 +958,6 @@ async fn main() {
     let router = Router::new()
         .hoop(affix_state::inject(salvo_conf))
         .get(root_handler)
-        // .push(Router::with_path("debug").get(debug_handler))
         .push(Router::with_path("get_comment").get(comment_text_get))
         .push(Router::with_path("get_comments").get(get_comments_by_blog_id))
         .push(Router::with_path("do_comment").get(login_to_comment))
