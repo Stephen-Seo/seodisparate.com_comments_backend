@@ -24,7 +24,7 @@ use std::time::Duration;
 use error::Error;
 use reqwest::Url;
 use salvo::prelude::*;
-use tokio::time::sleep;
+use tokio::{fs::read_to_string, time::sleep};
 
 pub const COMMON_CSS: &str = r#"
     body {
@@ -432,54 +432,26 @@ async fn github_auth_make_comment(
         .as_str()
         .ok_or(Error::from("Github access_token was not a string!"))?;
     // TODO DEBUG
-    sleep(Duration::from_secs(3)).await;
-    // eprintln!("DEBUG: Access token: {}", access_token_str);
-    // let user_info = client
-    //     .get("https://api.github.com/user")
-    //     // .header("Accept", "application/vnd.github+json")
-    //     .header("Accept", "application/json")
-    //     .header("Authorization", format!("Bearer {}", access_token_str))
-    //     .header("X-Github-Api-Version", "2022-11-28");
-    // eprintln!("DEBUG: RequestBuilder: {:?}", user_info);
-    // let user_info = user_info.send().await?.error_for_status()?;
-    // // eprintln!("DEBUG: {:?}", user_info);
-    // let user_info: serde_json::Value = user_info.json().await?;
+    // sleep(Duration::from_secs(3)).await;
+    eprintln!("DEBUG: Access token: {}", access_token_str);
 
-    let mut handle = curl::easy::Easy::new();
-    let mut data = Vec::new();
-    handle.get(true)?;
-    handle.fail_on_error(true)?;
-    handle.url("https://api.github.com/user")?;
-    let mut curl_headers = curl::easy::List::new();
-    curl_headers.append("Accept: application/vnd.github+json")?;
-    curl_headers.append(&format!("Authorization: Bearer {}", access_token_str))?;
-    curl_headers.append("X-Github-Api-Version: 2022-11-28")?;
-    handle.http_headers(curl_headers)?;
-    eprintln!("DEBUG: Curl handle: {:?}", handle);
-    {
-        let mut transfer = handle.transfer();
-        transfer.write_function(|new_data| {
-            data.extend_from_slice(new_data);
-            Ok(new_data.len())
-        })?;
-        transfer.perform()?;
+    let mut ret: Result<reqwest::Response, Error> = Err(Error::from("Placeholder"));
+    for _idx in 0..5 {
+        ret = client
+            .get("https://api.github.com/user")
+            .header("Accept", "application/vnd.github+json")
+            .header("Authorization", format!("Bearer {}", access_token_str))
+            .header("X-Github-Api-Version", "2022-11-28")
+            .send()
+            .await
+            .map_err(Error::from);
+        if ret.is_ok() {
+            break;
+        } else {
+            sleep(Duration::from_secs(3)).await;
+        }
     }
-    let response_code = handle.response_code()?;
-    if response_code != 200 {
-        eprintln!("CURL response code {}!\n", response_code);
-        res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
-        res.body(format!(
-            r#"<html><head><style>{}</style></head><body>
-            <b>Internal Server Error (Failed to query via CURL)</b>
-            </body></html>"#,
-            COMMON_CSS,
-        ));
-        return Ok(());
-    }
-
-    eprintln!("DEBUG: after curl");
-
-    let user_info: serde_json::Value = serde_json::from_str(str::from_utf8(&data)?)?;
+    let user_info: serde_json::Value = ret?.json().await?;
 
     let user_id: u64 = user_info
         .get("id")
@@ -663,16 +635,23 @@ async fn github_auth_edit_comment(
     let access_token_str: &str = access_token
         .as_str()
         .ok_or(Error::from("Github access token was not a string!"))?;
-    let user_info = client
-        .get("https://api.github.com/user")
-        // .header("Accept", "application/vnd.github+json")
-        .header("Accept", "application/json")
-        .header("Authorization", format!("Bearer {}", access_token_str))
-        .header("X-Github-Api-Version", "2022-11-28")
-        .send()
-        .await?
-        .error_for_status()?;
-    let user_info: serde_json::Value = user_info.json().await?;
+    let mut ret: Result<reqwest::Response, Error> = Err(Error::from("Placeholder"));
+    for _idx in 0..5 {
+        ret = client
+            .get("https://api.github.com/user")
+            .header("Accept", "application/vnd.github+json")
+            .header("Authorization", format!("Bearer {}", access_token_str))
+            .header("X-Github-Api-Version", "2022-11-28")
+            .send()
+            .await
+            .map_err(Error::from);
+        if ret.is_ok() {
+            break;
+        } else {
+            sleep(Duration::from_secs(3)).await;
+        }
+    }
+    let user_info: serde_json::Value = ret?.json().await?;
 
     let user_id: u64 = user_info
         .get("id")
@@ -874,16 +853,23 @@ async fn github_auth_del_comment(
     let access_token_str: &str = access_token
         .as_str()
         .ok_or(Error::from("Github access_token was not a string!"))?;
-    let user_info = client
-        .get("https://api.github.com/user")
-        // .header("Accept", "application/vnd.github+json")
-        .header("Accept", "application/json")
-        .header("Authorization", format!("Bearer {}", access_token_str))
-        .header("X-Github-Api-Version", "2022-11-28")
-        .send()
-        .await?
-        .error_for_status()?;
-    let user_info: serde_json::Value = user_info.json().await?;
+    let mut ret: Result<reqwest::Response, Error> = Err(Error::from("Placeholder"));
+    for _idx in 0..5 {
+        ret = client
+            .get("https://api.github.com/user")
+            .header("Accept", "application/vnd.github+json")
+            .header("Authorization", format!("Bearer {}", access_token_str))
+            .header("X-Github-Api-Version", "2022-11-28")
+            .send()
+            .await
+            .map_err(Error::from);
+        if ret.is_ok() {
+            break;
+        } else {
+            sleep(Duration::from_secs(3)).await;
+        }
+    }
+    let user_info: serde_json::Value = ret?.json().await?;
 
     let user_id: u64 = user_info
         .get("id")
@@ -938,8 +924,6 @@ async fn get_comments_by_blog_id(
 
 #[tokio::main]
 async fn main() {
-    curl::init();
-
     let config =
         config::Config::try_from(arg_parse::Args::parse_args().unwrap().get_config_path()).unwrap();
 
