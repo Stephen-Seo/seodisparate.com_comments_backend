@@ -16,6 +16,8 @@ Setting It Up
 
 Create an OAuth app on Github (visible under Developer Settings).
 
+Install a MySQL server (MariaDB recommended), and set up a database and user.
+
 Check the "example.config" and edit the fields accordingly.
 
 Set up your webserver to point towards this backend server:
