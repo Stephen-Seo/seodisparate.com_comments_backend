@@ -72,6 +72,9 @@ pub const WRITE_COMMENT_PAGE: &str = r#"
                     {
                         method: "POST",
                         body: json,
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
                     }
                 );
                 if (!response.ok) {
@@ -137,6 +140,9 @@ pub const EDIT_COMMENT_PAGE: &str = r#"
                     {
                         method: "POST",
                         body: json,
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
                     }
                 );
                 if (!response.ok) {
