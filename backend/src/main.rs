@@ -262,6 +262,7 @@ struct Config {
     base_url: String,
     allowed_urls: Vec<String>,
     allowed_bids: Vec<String>,
+    user_agent: String,
 }
 
 // #[handler]
@@ -416,9 +417,7 @@ async fn github_auth_make_comment(
     .map_err(|_| error::Error::from("Failed to parse redirect url!"))?;
 
     let client = reqwest::Client::builder();
-    let client = client
-        .user_agent("seodisparate.com_comments/1.0 (Stephen-Seo)")
-        .build()?;
+    let client = client.user_agent(&salvo_conf.user_agent).build()?;
     let g_res = client
         .post("https://github.com/login/oauth/access_token")
         .query(&[
@@ -636,9 +635,7 @@ async fn github_auth_edit_comment(
     .map_err(|_| error::Error::from("Failed to parse redirect url!"))?;
 
     let client = reqwest::Client::builder();
-    let client = client
-        .user_agent("seodisparate.com_comments/1.0 (Stephen-Seo)")
-        .build()?;
+    let client = client.user_agent(&salvo_conf.user_agent).build()?;
     let g_res = client
         .post("https://github.com/login/oauth/access_token")
         .query(&[
@@ -871,9 +868,7 @@ async fn github_auth_del_comment(
     .map_err(|_| error::Error::from("Failed to parse redirect url!"))?;
 
     let client = reqwest::Client::builder();
-    let client = client
-        .user_agent("seodisparate.com_comments/1.0 (Stephen-Seo)")
-        .build()?;
+    let client = client.user_agent(&salvo_conf.user_agent).build()?;
     let g_res = client
         .post("https://github.com/login/oauth/access_token")
         .query(&[
@@ -983,6 +978,7 @@ async fn main() {
         base_url: config.get_base_url().to_owned(),
         allowed_urls: config.get_allowed_urls().to_vec(),
         allowed_bids: config.get_allowed_bids().to_vec(),
+        user_agent: config.get_user_agent().to_owned(),
     };
 
     sql::set_up_sql_db(&salvo_conf.db_conn_string).unwrap();
