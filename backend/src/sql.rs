@@ -305,14 +305,14 @@ pub fn edit_comment(conn_str: &str, state: &str, comment: &str) -> Result<(), Er
     let mut conn = pool.get_conn()?;
 
     let pseudo_comment = conn.exec_map(
-        "SELECT user_id, username, userurl, useravatar, blog_post_id FROM PSEUDO_COMMENT WHERE state = ?",
+        "SELECT user_id, username, userurl, useravatar FROM PSEUDO_COMMENT WHERE state = ?",
         (state,),
-        |(user_id, username, userurl, useravatar, blog_post_id)| PseudoComment {
+        |(user_id, username, userurl, useravatar)| PseudoComment {
             user_id,
             username,
             userurl,
             useravatar,
-            blog_post_id,
+            blog_post_id: String::new(),
         },
     )?;
 
