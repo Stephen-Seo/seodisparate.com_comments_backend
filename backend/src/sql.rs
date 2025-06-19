@@ -335,7 +335,7 @@ pub fn try_delete_comment(conn_str: &str, cid: &str, uid: u64) -> Result<(), Err
     let mut conn = pool.get_conn()?;
 
     conn.exec_drop(
-        "DELETE FROM COMMENT WHERE uuid = ?, user_id = ?",
+        "DELETE FROM COMMENT WHERE uuid = ? AND user_id = ?",
         (cid, uid),
     )?;
 
