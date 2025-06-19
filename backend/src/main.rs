@@ -216,7 +216,7 @@ async fn login_to_comment(
     req: &mut Request,
     res: &mut Response,
     depot: &mut Depot,
-) -> Result<(), error::Error> {
+) -> Result<(), Error> {
     let blog_id: String = req.try_query("blog_id").map_err(Error::err_to_client_err)?;
     let blog_url: String = req
         .try_query("blog_url")
@@ -256,7 +256,7 @@ async fn login_to_comment(
         &format!("{}/github_auth_make_comment", salvo_conf.base_url),
         &[("blog_id", blog_id), ("blog_url", blog_url)],
     )
-    .map_err(|_| error::Error::from("Failed to parse redirect url!"))?;
+    .map_err(|_| Error::from("Failed to parse redirect url!"))?;
     let github_api_url = Url::parse_with_params(
         "https://github.com/login/oauth/authorize",
         &[
@@ -265,7 +265,7 @@ async fn login_to_comment(
             ("redirect_uri", redirect_url.as_str()),
         ],
     )
-    .map_err(|_| error::Error::from("Failed to parse github api url!"))?;
+    .map_err(|_| Error::from("Failed to parse github api url!"))?;
     let script = format!(
         r#"
             "use strict;"
@@ -294,19 +294,13 @@ async fn github_auth_make_comment(
     req: &mut Request,
     res: &mut Response,
     depot: &mut Depot,
-) -> Result<(), error::Error> {
-    let blog_id: String = req
-        .try_query("blog_id")
-        .map_err(error::Error::err_to_client_err)?;
+) -> Result<(), Error> {
+    let blog_id: String = req.try_query("blog_id").map_err(Error::err_to_client_err)?;
     let blog_url: String = req
         .try_query("blog_url")
-        .map_err(error::Error::err_to_client_err)?;
-    let state: String = req
-        .try_query("state")
-        .map_err(error::Error::err_to_client_err)?;
-    let code: String = req
-        .try_query("code")
-        .map_err(error::Error::err_to_client_err)?;
+        .map_err(Error::err_to_client_err)?;
+    let state: String = req.try_query("state").map_err(Error::err_to_client_err)?;
+    let code: String = req.try_query("code").map_err(Error::err_to_client_err)?;
 
     let salvo_conf = depot.obtain::<Config>().unwrap();
 
@@ -327,7 +321,7 @@ async fn github_auth_make_comment(
         &format!("{}/github_auth_make_comment", salvo_conf.base_url),
         &[("blog_id", &blog_id), ("blog_url", &blog_url)],
     )
-    .map_err(|_| error::Error::from("Failed to parse redirect url!"))?;
+    .map_err(|_| Error::from("Failed to parse redirect url!"))?;
 
     let client = reqwest::Client::builder();
     let client = client.user_agent(&salvo_conf.user_agent).build()?;
@@ -344,7 +338,7 @@ async fn github_auth_make_comment(
         .await?;
 
     let json: serde_json::Value = g_res.json().await?;
-    let access_token = json.get("access_token").ok_or(error::Error::from(
+    let access_token = json.get("access_token").ok_or(Error::from(
         "Failed to parse access_token from response from Github!",
     ))?;
     let access_token_str: &str = access_token
@@ -380,7 +374,7 @@ async fn github_auth_make_comment(
 
     let user_id: u64 = user_info
         .get("id")
-        .ok_or(error::Error::from("Failed to parse user info id!"))?
+        .ok_or(Error::from("Failed to parse user info id!"))?
         .to_string()
         .parse()?;
 
@@ -391,40 +385,36 @@ async fn github_auth_make_comment(
         if user_name_inner.is_string() {
             user_name_str = user_name_inner
                 .as_str()
-                .ok_or(error::Error::from("Failed to parse user info name!"))?
+                .ok_or(Error::from("Failed to parse user info name!"))?
                 .to_owned();
         } else {
             user_name = user_info.get("login");
             user_name_str = user_name
-                .ok_or(error::Error::from("User has no name or login!"))?
+                .ok_or(Error::from("User has no name or login!"))?
                 .as_str()
-                .ok_or(error::Error::from("Failed to parse user info login!"))?
+                .ok_or(Error::from("Failed to parse user info login!"))?
                 .to_owned();
         }
     } else {
         user_name = user_info.get("login");
         user_name_str = user_name
-            .ok_or(error::Error::from("User has no name or login!"))?
+            .ok_or(Error::from("User has no name or login!"))?
             .as_str()
-            .ok_or(error::Error::from("Failed to parse user info login!"))?
+            .ok_or(Error::from("Failed to parse user info login!"))?
             .to_owned();
     }
 
     let user_url = user_info
         .get("html_url")
-        .ok_or(error::Error::from("Failed to parse user info profile url!"))?
+        .ok_or(Error::from("Failed to parse user info profile url!"))?
         .as_str()
-        .ok_or(error::Error::from("Failed to parse user info profile url!"))?;
+        .ok_or(Error::from("Failed to parse user info profile url!"))?;
 
     let user_avatar_url = user_info
         .get("avatar_url")
-        .ok_or(error::Error::from(
-            "Failed to parse user info profile avatar url!",
-        ))?
+        .ok_or(Error::from("Failed to parse user info profile avatar url!"))?
         .as_str()
-        .ok_or(error::Error::from(
-            "Failed to parse user info profile avatar url!",
-        ))?;
+        .ok_or(Error::from("Failed to parse user info profile avatar url!"))?;
 
     sql::add_pseudo_comment_data(
         &salvo_conf.db_conn_string,
@@ -452,20 +442,20 @@ async fn github_auth_make_comment(
 }
 
 #[handler]
-async fn submit_comment(req: &mut Request, depot: &mut Depot) -> Result<(), error::Error> {
+async fn submit_comment(req: &mut Request, depot: &mut Depot) -> Result<(), Error> {
     let request_json: serde_json::Value =
         req.parse_json().await.map_err(Error::err_to_client_err)?;
 
     let req_state = request_json
         .get("state")
-        .ok_or(error::Error::from("JSON parse error: \"state\"").into_client_err())?
+        .ok_or(Error::from("JSON parse error: \"state\"").into_client_err())?
         .as_str()
-        .ok_or(error::Error::from("JSON parse error: \"state\"").into_client_err())?;
+        .ok_or(Error::from("JSON parse error: \"state\"").into_client_err())?;
     let req_comment = request_json
         .get("comment_text")
-        .ok_or(error::Error::from("JSON parse error: \"comment_text\"").into_client_err())?
+        .ok_or(Error::from("JSON parse error: \"comment_text\"").into_client_err())?
         .as_str()
-        .ok_or(error::Error::from("JSON parse error: \"comment_text\"").into_client_err())?;
+        .ok_or(Error::from("JSON parse error: \"comment_text\"").into_client_err())?;
 
     let salvo_conf = depot.obtain::<Config>().unwrap();
 
@@ -481,7 +471,7 @@ async fn login_to_edit_comment(
     req: &mut Request,
     res: &mut Response,
     depot: &mut Depot,
-) -> Result<(), error::Error> {
+) -> Result<(), Error> {
     let salvo_conf = depot.obtain::<Config>().unwrap();
     let comment_id: String = req
         .try_query("comment_id")
@@ -494,7 +484,7 @@ async fn login_to_edit_comment(
         &format!("{}/github_auth_edit_comment", salvo_conf.base_url),
         &[("comment_id", comment_id), ("blog_url", blog_url)],
     )
-    .map_err(|_| error::Error::from("Failed to parse redirect url!"))?;
+    .map_err(|_| Error::from("Failed to parse redirect url!"))?;
     let github_api_url = Url::parse_with_params(
         "https://github.com/login/oauth/authorize",
         &[
@@ -503,7 +493,7 @@ async fn login_to_edit_comment(
             ("redirect_uri", redirect_url.as_str()),
         ],
     )
-    .map_err(|_| error::Error::from("Failed to parse github api url!"))?;
+    .map_err(|_| Error::from("Failed to parse github api url!"))?;
     let script = format!(
         r#"
             "use strict;"
@@ -538,12 +528,8 @@ async fn github_auth_edit_comment(
     let blog_url: String = req
         .try_query("blog_url")
         .map_err(Error::err_to_client_err)?;
-    let state: String = req
-        .try_query("state")
-        .map_err(error::Error::err_to_client_err)?;
-    let code: String = req
-        .try_query("code")
-        .map_err(error::Error::err_to_client_err)?;
+    let state: String = req.try_query("state").map_err(Error::err_to_client_err)?;
+    let code: String = req.try_query("code").map_err(Error::err_to_client_err)?;
 
     let salvo_conf = depot.obtain::<Config>().unwrap();
 
@@ -564,7 +550,7 @@ async fn github_auth_edit_comment(
         &format!("{}/github_auth_edit_comment", salvo_conf.base_url),
         &[("comment_id", &comment_id)],
     )
-    .map_err(|_| error::Error::from("Failed to parse redirect url!"))?;
+    .map_err(|_| Error::from("Failed to parse redirect url!"))?;
 
     let client = reqwest::Client::builder();
     let client = client.user_agent(&salvo_conf.user_agent).build()?;
@@ -581,7 +567,7 @@ async fn github_auth_edit_comment(
         .await?;
 
     let json: serde_json::Value = g_res.json().await?;
-    let access_token = json.get("access_token").ok_or(error::Error::from(
+    let access_token = json.get("access_token").ok_or(Error::from(
         "Failed to parse access_token from response from Github!",
     ))?;
     let access_token_str: &str = access_token
@@ -616,14 +602,14 @@ async fn github_auth_edit_comment(
 
     let user_id: u64 = user_info
         .get("id")
-        .ok_or(error::Error::from("Failed to parse user info id!"))?
+        .ok_or(Error::from("Failed to parse user info id!"))?
         .to_string()
         .parse()?;
     let user_avatar = user_info
         .get("avatar_url")
-        .ok_or(error::Error::from("Failed to parse user info avatar url!"))?
+        .ok_or(Error::from("Failed to parse user info avatar url!"))?
         .as_str()
-        .ok_or(error::Error::from("Failed to parse user info avatar url!"))?;
+        .ok_or(Error::from("Failed to parse user info avatar url!"))?;
     let mut user_name: Option<&serde_json::Value> = user_info.get("name");
     let user_name_str: String;
 
@@ -631,29 +617,29 @@ async fn github_auth_edit_comment(
         if user_name_inner.is_string() {
             user_name_str = user_name_inner
                 .as_str()
-                .ok_or(error::Error::from("Failed to parse user info name!"))?
+                .ok_or(Error::from("Failed to parse user info name!"))?
                 .to_owned();
         } else {
             user_name = user_info.get("login");
             user_name_str = user_name
-                .ok_or(error::Error::from("User has no name or login!"))?
+                .ok_or(Error::from("User has no name or login!"))?
                 .as_str()
-                .ok_or(error::Error::from("Failed to parse user info login!"))?
+                .ok_or(Error::from("Failed to parse user info login!"))?
                 .to_owned();
         }
     } else {
         user_name = user_info.get("login");
         user_name_str = user_name
-            .ok_or(error::Error::from("User has no name or login!"))?
+            .ok_or(Error::from("User has no name or login!"))?
             .as_str()
-            .ok_or(error::Error::from("Failed to parse user info login!"))?
+            .ok_or(Error::from("Failed to parse user info login!"))?
             .to_owned();
     }
     let user_url = user_info
         .get("html_url")
-        .ok_or(error::Error::from("Failed to parse user info url!"))?
+        .ok_or(Error::from("Failed to parse user info url!"))?
         .as_str()
-        .ok_or(error::Error::from("Failed to parse user info url!"))?;
+        .ok_or(Error::from("Failed to parse user info url!"))?;
 
     let can_edit: bool = sql::check_edit_comment_auth(
         &salvo_conf.db_conn_string,
@@ -711,14 +697,14 @@ async fn submit_edit_comment(req: &mut Request, depot: &mut Depot) -> Result<(),
 
     let req_state = request_json
         .get("state")
-        .ok_or(error::Error::from("JSON parse error: \"state\"").into_client_err())?
+        .ok_or(Error::from("JSON parse error: \"state\"").into_client_err())?
         .as_str()
-        .ok_or(error::Error::from("JSON parse error: \"state\"").into_client_err())?;
+        .ok_or(Error::from("JSON parse error: \"state\"").into_client_err())?;
     let req_comment = request_json
         .get("comment_text")
-        .ok_or(error::Error::from("JSON parse error: \"comment_text\"").into_client_err())?
+        .ok_or(Error::from("JSON parse error: \"comment_text\"").into_client_err())?
         .as_str()
-        .ok_or(error::Error::from("JSON parse error: \"comment_text\"").into_client_err())?;
+        .ok_or(Error::from("JSON parse error: \"comment_text\"").into_client_err())?;
 
     sql::edit_comment(&salvo_conf.db_conn_string, req_state, req_comment)?;
 
@@ -746,7 +732,7 @@ async fn login_to_delete_comment(
         &format!("{}/github_auth_del_comment", salvo_conf.base_url),
         &[("comment_id", comment_id), ("blog_url", blog_url)],
     )
-    .map_err(|_| error::Error::from("Failed to parse redirect url!"))?;
+    .map_err(|_| Error::from("Failed to parse redirect url!"))?;
     let github_api_url = Url::parse_with_params(
         "https://github.com/login/oauth/authorize",
         &[
@@ -755,7 +741,7 @@ async fn login_to_delete_comment(
             ("redirect_uri", redirect_url.as_str()),
         ],
     )
-    .map_err(|_| error::Error::from("Failed to parse github api url!"))?;
+    .map_err(|_| Error::from("Failed to parse github api url!"))?;
     let script = format!(
         r#"
             "use strict;"
@@ -790,12 +776,8 @@ async fn github_auth_del_comment(
     let blog_url: String = req
         .try_query("blog_url")
         .map_err(Error::err_to_client_err)?;
-    let state: String = req
-        .try_query("state")
-        .map_err(error::Error::err_to_client_err)?;
-    let code: String = req
-        .try_query("code")
-        .map_err(error::Error::err_to_client_err)?;
+    let state: String = req.try_query("state").map_err(Error::err_to_client_err)?;
+    let code: String = req.try_query("code").map_err(Error::err_to_client_err)?;
 
     let salvo_conf = depot.obtain::<Config>().unwrap();
 
@@ -816,7 +798,7 @@ async fn github_auth_del_comment(
         &format!("{}/github_auth_del_comment", salvo_conf.base_url),
         &[("comment_id", &comment_id), ("blog_url", &blog_url)],
     )
-    .map_err(|_| error::Error::from("Failed to parse redirect url!"))?;
+    .map_err(|_| Error::from("Failed to parse redirect url!"))?;
 
     let client = reqwest::Client::builder();
     let client = client.user_agent(&salvo_conf.user_agent).build()?;
@@ -833,7 +815,7 @@ async fn github_auth_del_comment(
         .await?;
 
     let json: serde_json::Value = g_res.json().await?;
-    let access_token = json.get("access_token").ok_or(error::Error::from(
+    let access_token = json.get("access_token").ok_or(Error::from(
         "Failed to parse access_token from response from Github!",
     ))?;
     let access_token_str: &str = access_token
@@ -868,7 +850,7 @@ async fn github_auth_del_comment(
 
     let user_id: u64 = user_info
         .get("id")
-        .ok_or(error::Error::from("Failed to parse user info id!"))?
+        .ok_or(Error::from("Failed to parse user info id!"))?
         .to_string()
         .parse()?;
 
