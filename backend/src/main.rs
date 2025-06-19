@@ -127,7 +127,7 @@ pub const EDIT_COMMENT_PAGE: &str = r#"
             "use strict;"
 
             async function populate_textarea(ta, cid) {
-                const response = await fetch("http://127.0.0.1:9090/get_comment?comment_id=" + cid);
+                const response = await fetch("{BASE_URL}/get_comment?comment_id=" + cid);
                 if (response.ok) {
                     ta.value = await response.text();
                 } else {
