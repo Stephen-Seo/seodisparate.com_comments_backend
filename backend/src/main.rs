@@ -24,7 +24,7 @@ use std::time::Duration;
 use error::Error;
 use reqwest::Url;
 use salvo::prelude::*;
-use tokio::{fs::read_to_string, time::sleep};
+use tokio::time::sleep;
 
 pub const COMMON_CSS: &str = r#"
     body {
@@ -409,7 +409,10 @@ async fn github_auth_make_comment(
     )
     .map_err(|_| error::Error::from("Failed to parse redirect url!"))?;
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder();
+    let client = client
+        .user_agent("seodisparate.com_comments/1.0 (Stephen-Seo)")
+        .build()?;
     let g_res = client
         .post("https://github.com/login/oauth/access_token")
         .query(&[
@@ -431,27 +434,33 @@ async fn github_auth_make_comment(
     let access_token_str: &str = access_token
         .as_str()
         .ok_or(Error::from("Github access_token was not a string!"))?;
-    // TODO DEBUG
-    // sleep(Duration::from_secs(3)).await;
-    eprintln!("DEBUG: Access token: {}", access_token_str);
 
-    let mut ret: Result<reqwest::Response, Error> = Err(Error::from("Placeholder"));
-    for _idx in 0..5 {
-        ret = client
+    let mut reqw_resp: Option<reqwest::Response> = None;
+    for _idx in 0..3 {
+        let ret = client
             .get("https://api.github.com/user")
             .header("Accept", "application/vnd.github+json")
-            .header("Authorization", format!("Bearer {}", access_token_str))
+            .header("Authorization", &format!("Bearer {}", access_token_str))
             .header("X-Github-Api-Version", "2022-11-28")
             .send()
             .await
             .map_err(Error::from);
         if ret.is_ok() {
-            break;
+            let ret = ret?.error_for_status();
+            if ret.is_ok() {
+                reqw_resp = Some(ret?);
+                break;
+            } else {
+                sleep(Duration::from_secs(3)).await;
+            }
         } else {
             sleep(Duration::from_secs(3)).await;
         }
     }
-    let user_info: serde_json::Value = ret?.json().await?;
+    let user_info: serde_json::Value = reqw_resp
+        .ok_or(Error::from("Failed to get user info via oauth token!"))?
+        .json()
+        .await?;
 
     let user_id: u64 = user_info
         .get("id")
@@ -459,30 +468,35 @@ async fn github_auth_make_comment(
         .to_string()
         .parse()?;
 
-    let user_name: String = user_info
+    let user_name = user_info
         .get("name")
         .ok_or(error::Error::from("Failed to parse user info name!"))?
-        .to_string();
+        .as_str()
+        .ok_or(error::Error::from("Failed to parse user info name!"))?;
 
-    let user_url: String = user_info
+    let user_url = user_info
         .get("html_url")
         .ok_or(error::Error::from("Failed to parse user info profile url!"))?
-        .to_string();
+        .as_str()
+        .ok_or(error::Error::from("Failed to parse user info profile url!"))?;
 
-    let user_avatar_url: String = user_info
+    let user_avatar_url = user_info
         .get("avatar_url")
         .ok_or(error::Error::from(
             "Failed to parse user info profile avatar url!",
         ))?
-        .to_string();
+        .as_str()
+        .ok_or(error::Error::from(
+            "Failed to parse user info profile avatar url!",
+        ))?;
 
     sql::add_pseudo_comment_data(
         &salvo_conf.db_conn_string,
         &state,
         user_id,
-        &user_name,
-        &user_url,
-        &user_avatar_url,
+        user_name,
+        user_url,
+        user_avatar_url,
         Some(&blog_id),
         None,
     )?;
@@ -491,9 +505,9 @@ async fn github_auth_make_comment(
         WRITE_COMMENT_PAGE
             .replace("{BLOG_ID}", &blog_id)
             .replace("{COMMON_CSS}", COMMON_CSS)
-            .replace("{USER_AVATAR_URL}", &user_avatar_url)
-            .replace("{USER_NAME}", &user_name)
-            .replace("{USER_PROFILE}", &user_url)
+            .replace("{USER_AVATAR_URL}", user_avatar_url)
+            .replace("{USER_NAME}", user_name)
+            .replace("{USER_PROFILE}", user_url)
             .replace("{BASE_URL}", &salvo_conf.base_url)
             .replace("{BLOG_URL}", &blog_url)
             .replace("{STATE_STRING}", &state),
@@ -506,20 +520,22 @@ async fn submit_comment(req: &mut Request, depot: &mut Depot) -> Result<(), erro
     let request_json: serde_json::Value =
         req.parse_json().await.map_err(Error::err_to_client_err)?;
 
-    let req_state: String = request_json
+    let req_state = request_json
         .get("state")
         .ok_or(error::Error::from("JSON parse error: \"state\"").into_client_err())?
-        .to_string();
-    let req_comment: String = request_json
+        .as_str()
+        .ok_or(error::Error::from("JSON parse error: \"state\"").into_client_err())?;
+    let req_comment = request_json
         .get("comment_text")
         .ok_or(error::Error::from("JSON parse error: \"comment_text\"").into_client_err())?
-        .to_string();
+        .as_str()
+        .ok_or(error::Error::from("JSON parse error: \"comment_text\"").into_client_err())?;
 
     let salvo_conf = depot.obtain::<Config>().unwrap();
 
-    sql::add_comment(&salvo_conf.db_conn_string, &req_state, &req_comment)?;
+    sql::add_comment(&salvo_conf.db_conn_string, req_state, req_comment)?;
 
-    let _did_remove = sql::check_remove_rng_uuid(&salvo_conf.db_conn_string, &req_state)?;
+    let _did_remove = sql::check_remove_rng_uuid(&salvo_conf.db_conn_string, req_state)?;
 
     Ok(())
 }
@@ -615,7 +631,10 @@ async fn github_auth_edit_comment(
     )
     .map_err(|_| error::Error::from("Failed to parse redirect url!"))?;
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder();
+    let client = client
+        .user_agent("seodisparate.com_comments/1.0 (Stephen-Seo)")
+        .build()?;
     let g_res = client
         .post("https://github.com/login/oauth/access_token")
         .query(&[
@@ -635,9 +654,9 @@ async fn github_auth_edit_comment(
     let access_token_str: &str = access_token
         .as_str()
         .ok_or(Error::from("Github access token was not a string!"))?;
-    let mut ret: Result<reqwest::Response, Error> = Err(Error::from("Placeholder"));
-    for _idx in 0..5 {
-        ret = client
+    let mut reqw_resp: Option<reqwest::Response> = None;
+    for _idx in 0..3 {
+        let ret = client
             .get("https://api.github.com/user")
             .header("Accept", "application/vnd.github+json")
             .header("Authorization", format!("Bearer {}", access_token_str))
@@ -646,30 +665,42 @@ async fn github_auth_edit_comment(
             .await
             .map_err(Error::from);
         if ret.is_ok() {
-            break;
+            let ret = ret?.error_for_status();
+            if ret.is_ok() {
+                reqw_resp = Some(ret?);
+                break;
+            } else {
+                sleep(Duration::from_secs(3)).await;
+            }
         } else {
             sleep(Duration::from_secs(3)).await;
         }
     }
-    let user_info: serde_json::Value = ret?.json().await?;
+    let user_info: serde_json::Value = reqw_resp
+        .ok_or(Error::from("Failed to get user info via oauth token!"))?
+        .json()
+        .await?;
 
     let user_id: u64 = user_info
         .get("id")
         .ok_or(error::Error::from("Failed to parse user info id!"))?
         .to_string()
         .parse()?;
-    let user_avatar: String = user_info
+    let user_avatar = user_info
         .get("avatar_url")
         .ok_or(error::Error::from("Failed to parse user info avatar url!"))?
-        .to_string();
-    let user_name: String = user_info
+        .as_str()
+        .ok_or(error::Error::from("Failed to parse user info avatar url!"))?;
+    let user_name = user_info
         .get("name")
         .ok_or(error::Error::from("Failed to parse user info name!"))?
-        .to_string();
-    let user_url: String = user_info
+        .as_str()
+        .ok_or(error::Error::from("Failed to parse user info name!"))?;
+    let user_url = user_info
         .get("html_url")
         .ok_or(error::Error::from("Failed to parse user info url!"))?
-        .to_string();
+        .as_str()
+        .ok_or(error::Error::from("Failed to parse user info url!"))?;
 
     let can_edit: bool = sql::check_edit_comment_auth(
         &salvo_conf.db_conn_string,
@@ -696,9 +727,9 @@ async fn github_auth_edit_comment(
         &salvo_conf.db_conn_string,
         &state,
         user_id,
-        &user_name,
-        &user_url,
-        &user_avatar,
+        user_name,
+        user_url,
+        user_avatar,
         None,
         Some(&comment_id),
     )?;
@@ -706,9 +737,9 @@ async fn github_auth_edit_comment(
     res.body(
         EDIT_COMMENT_PAGE
             .replace("{COMMON_CSS}", COMMON_CSS)
-            .replace("{USER_AVATAR_URL}", &user_avatar)
-            .replace("{USER_NAME}", &user_name)
-            .replace("{USER_PROFILE}", &user_url)
+            .replace("{USER_AVATAR_URL}", user_avatar)
+            .replace("{USER_NAME}", user_name)
+            .replace("{USER_PROFILE}", user_url)
             .replace("{BASE_URL}", &salvo_conf.base_url)
             .replace("{BLOG_URL}", &blog_url)
             .replace("{STATE_STRING}", &state)
@@ -725,18 +756,20 @@ async fn submit_edit_comment(req: &mut Request, depot: &mut Depot) -> Result<(),
     let request_json: serde_json::Value =
         req.parse_json().await.map_err(Error::err_to_client_err)?;
 
-    let req_state: String = request_json
+    let req_state = request_json
         .get("state")
         .ok_or(error::Error::from("JSON parse error: \"state\"").into_client_err())?
-        .to_string();
-    let req_comment: String = request_json
+        .as_str()
+        .ok_or(error::Error::from("JSON parse error: \"state\"").into_client_err())?;
+    let req_comment = request_json
         .get("comment_text")
         .ok_or(error::Error::from("JSON parse error: \"comment_text\"").into_client_err())?
-        .to_string();
+        .as_str()
+        .ok_or(error::Error::from("JSON parse error: \"comment_text\"").into_client_err())?;
 
-    sql::edit_comment(&salvo_conf.db_conn_string, &req_state, &req_comment)?;
+    sql::edit_comment(&salvo_conf.db_conn_string, req_state, req_comment)?;
 
-    let _did_remove = sql::check_remove_rng_uuid(&salvo_conf.db_conn_string, &req_state)?;
+    let _did_remove = sql::check_remove_rng_uuid(&salvo_conf.db_conn_string, req_state)?;
 
     Ok(())
 }
@@ -833,7 +866,10 @@ async fn github_auth_del_comment(
     )
     .map_err(|_| error::Error::from("Failed to parse redirect url!"))?;
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder();
+    let client = client
+        .user_agent("seodisparate.com_comments/1.0 (Stephen-Seo)")
+        .build()?;
     let g_res = client
         .post("https://github.com/login/oauth/access_token")
         .query(&[
@@ -853,9 +889,9 @@ async fn github_auth_del_comment(
     let access_token_str: &str = access_token
         .as_str()
         .ok_or(Error::from("Github access_token was not a string!"))?;
-    let mut ret: Result<reqwest::Response, Error> = Err(Error::from("Placeholder"));
-    for _idx in 0..5 {
-        ret = client
+    let mut reqw_resp: Option<reqwest::Response> = None;
+    for _idx in 0..3 {
+        let ret = client
             .get("https://api.github.com/user")
             .header("Accept", "application/vnd.github+json")
             .header("Authorization", format!("Bearer {}", access_token_str))
@@ -864,12 +900,21 @@ async fn github_auth_del_comment(
             .await
             .map_err(Error::from);
         if ret.is_ok() {
-            break;
+            let ret = ret?.error_for_status();
+            if ret.is_ok() {
+                reqw_resp = Some(ret?);
+                break;
+            } else {
+                sleep(Duration::from_secs(3)).await;
+            }
         } else {
             sleep(Duration::from_secs(3)).await;
         }
     }
-    let user_info: serde_json::Value = ret?.json().await?;
+    let user_info: serde_json::Value = reqw_resp
+        .ok_or(Error::from("Failed to get user info via oauth token!"))?
+        .json()
+        .await?;
 
     let user_id: u64 = user_info
         .get("id")
