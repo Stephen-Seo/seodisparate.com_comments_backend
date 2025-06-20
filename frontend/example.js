@@ -5,6 +5,8 @@
 // It expects a <div id="blog_id"></div> somewhere on the page.
 
 async function load_blog_comments(blog_id, blog_url, base_url) {
+  let blog_url = encodeURIComponent(blog_url);
+
   let comment_div = document.getElementById(blog_id);
   comment_div.innerHTML = "";
   const response = await fetch(base_url + "/get_comments?blog_id=" + blog_id);
