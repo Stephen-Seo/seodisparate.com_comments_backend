@@ -32,12 +32,13 @@ async function load_blog_comments(blog_id, blog_url, base_url) {
         link_elem.setAttribute("href", json_arr[idx].userurl);
         link_elem.innerText = "(User Profile)";
         comment_div.appendChild(link_elem);
-        let create_time_div = document.createElement("div");
+        let create_time_bold = document.createElement("b");
         let create_time_obj = new Date(json_arr[idx].create_date);
         let edit_time_obj = new Date(json_arr[idx].edit_date);
-        create_time_div.innerText = "Created: " + create_time_obj.toString();
-        create_time_div.innerText += ", Edited: " + edit_time_obj.toString();
-        comment_div.appendChild(create_time_div);
+        create_time_bold.innerText = "Created: " + create_time_obj.toString();
+        create_time_bold.innerText += ", Edited: " + edit_time_obj.toString();
+        comment_div.appendChild(document.createElement("br"));
+        comment_div.appendChild(create_time_bold);
         let comment_text = document.createElement("div");
         comment_text.innerText = json_arr[idx].comment;
         comment_div.appendChild(comment_text);
