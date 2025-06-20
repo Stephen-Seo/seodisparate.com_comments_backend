@@ -5,7 +5,7 @@
 // It expects a <div id="blog_id"></div> somewhere on the page.
 
 async function load_blog_comments(blog_id, blog_url, base_url) {
-  let blog_url = encodeURIComponent(blog_url);
+  let blog_url_encoded = encodeURIComponent(blog_url);
 
   let comment_div = document.getElementById(blog_id);
   comment_div.innerHTML = "";
@@ -47,13 +47,13 @@ async function load_blog_comments(blog_id, blog_url, base_url) {
         let edit_button = document.createElement("button");
         edit_button.innerText = "Edit";
         edit_button.onclick = (e) => {
-          window.location = base_url + "/edit_comment?comment_id=" + json_arr[idx].comment_id + "&blog_url=" + blog_url;
+          window.location = base_url + "/edit_comment?comment_id=" + json_arr[idx].comment_id + "&blog_url=" + blog_url_encoded;
         };
         comment_div.appendChild(edit_button);
         let delete_button = document.createElement("button");
         delete_button.innerText = "Delete";
         delete_button.onclick = (e) => {
-          window.location = base_url + "/del_comment?comment_id=" + json_arr[idx].comment_id + "&blog_url=" + blog_url;
+          window.location = base_url + "/del_comment?comment_id=" + json_arr[idx].comment_id + "&blog_url=" + blog_url_encoded;
         };
         comment_div.appendChild(delete_button);
       }
@@ -68,7 +68,7 @@ async function load_blog_comments(blog_id, blog_url, base_url) {
   comment_div.appendChild(document.createElement("br"));
   let new_comment_button = document.createElement("button");
   new_comment_button.onclick = (e) => {
-    window.location = base_url + "/do_comment?blog_id=" + blog_id + "&blog_url=" + blog_url;
+    window.location = base_url + "/do_comment?blog_id=" + blog_id + "&blog_url=" + blog_url_encoded;
   };
   new_comment_button.innerText = "Submit a New Comment";
   comment_div.appendChild(new_comment_button);
