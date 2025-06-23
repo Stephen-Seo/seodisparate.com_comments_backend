@@ -345,6 +345,16 @@ pub fn try_delete_comment(conn_str: &str, cid: &str, uid: u64) -> Result<(), Err
     Ok(())
 }
 
+pub fn try_delete_comment_id_only(conn_str: &str, cid: &str) -> Result<(), Error> {
+    let pool = Pool::new(conn_str)?;
+
+    let mut conn = pool.get_conn()?;
+
+    conn.exec_drop("DELETE FROM COMMENT WHERE uuid = ?", (cid,))?;
+
+    Ok(())
+}
+
 pub fn get_comments_per_blog_id(conn_str: &str, blog_id: &str) -> Result<Vec<Comment>, Error> {
     let pool = Pool::new(conn_str)?;
 

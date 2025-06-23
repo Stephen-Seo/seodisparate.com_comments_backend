@@ -36,6 +36,7 @@ pub struct Config {
     allowed_bids: Vec<String>,
     user_agent: String,
     on_comment_cmds: Vec<String>,
+    admins: Vec<String>,
 }
 
 impl Config {
@@ -81,6 +82,10 @@ impl Config {
     pub fn get_on_comment_cmds(&self) -> &[String] {
         &self.on_comment_cmds
     }
+
+    pub fn get_admins(&self) -> &[String] {
+        &self.admins
+    }
 }
 
 impl TryFrom<&Path> for Config {
@@ -105,6 +110,8 @@ impl TryFrom<&Path> for Config {
         let mut user_agent: Result<String, Self::Error> = Err("user_agent not specified!".into());
 
         let mut on_comment_cmds: Vec<String> = Vec::new();
+
+        let mut admins: Vec<String> = Vec::new();
 
         let mut key: String = String::new();
         let mut val: String = String::new();
@@ -150,6 +157,8 @@ impl TryFrom<&Path> for Config {
                     user_agent = Ok(val);
                 } else if key == "on_comment_cmd" {
                     on_comment_cmds.push(val);
+                } else if key == "admin" {
+                    admins.push(val);
                 } else {
                     println!("WARNING: Got unknown config key \"{}\"!", key);
                 }
@@ -189,6 +198,8 @@ impl TryFrom<&Path> for Config {
                 user_agent = Ok(val);
             } else if key == "on_comment_cmd" {
                 on_comment_cmds.push(val);
+            } else if key == "admin" {
+                admins.push(val);
             } else {
                 println!("WARNING: Got unknown config key \"{}\"!", key);
             }
@@ -209,6 +220,7 @@ impl TryFrom<&Path> for Config {
             allowed_bids,
             user_agent: user_agent?,
             on_comment_cmds,
+            admins,
         })
     }
 }

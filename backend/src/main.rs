@@ -183,6 +183,7 @@ struct Config {
     allowed_bids: Vec<String>,
     user_agent: String,
     on_comment_cmds: Vec<String>,
+    admins: Vec<String>,
 }
 
 #[handler]
@@ -867,12 +868,25 @@ async fn github_auth_del_comment(
         .to_string()
         .parse()?;
 
+    let user_login: String = user_info
+        .get("login")
+        .ok_or(Error::from("Failed to parse user info login!"))?
+        .as_str()
+        .ok_or(Error::from("Failed to parse user info login!"))?
+        .to_string();
+
+    let is_admin: bool =
+        salvo_conf.admins.iter().fold(
+            false,
+            |acc, elem| if acc { acc } else { elem == &user_login },
+        );
+
     let can_del: bool = sql::check_edit_comment_auth(
         &salvo_conf.db_conn_string,
         &comment_id,
         &user_id.to_string(),
     )?;
-    if !can_del {
+    if !can_del && !is_admin {
         eprintln!(
             "User tried to delete comment they didn't make! {}",
             &comment_id
@@ -888,7 +902,11 @@ async fn github_auth_del_comment(
         return Ok(());
     }
 
-    sql::try_delete_comment(&salvo_conf.db_conn_string, &comment_id, user_id)?;
+    if is_admin {
+        sql::try_delete_comment_id_only(&salvo_conf.db_conn_string, &comment_id)?;
+    } else {
+        sql::try_delete_comment(&salvo_conf.db_conn_string, &comment_id, user_id)?;
+    }
 
     let _did_remove = sql::check_remove_rng_uuid(&salvo_conf.db_conn_string, &state)?;
 
@@ -946,7 +964,8 @@ async fn main() {
         allowed_urls: config.get_allowed_urls().to_vec(),
         allowed_bids: config.get_allowed_bids().to_vec(),
         user_agent: config.get_user_agent().to_owned(),
-        on_comment_cmds: config.get_on_comment_cmds().to_owned(),
+        on_comment_cmds: config.get_on_comment_cmds().to_vec(),
+        admins: config.get_admins().to_vec(),
     };
 
     sql::set_up_sql_db(&salvo_conf.db_conn_string).unwrap();
