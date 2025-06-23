@@ -35,9 +35,16 @@ Ensure your "base_url" config is set to the front-facing webserver's url with
 
 base_url=https://example.com/comment_api
 
-Note that "allowed_bid" in the config can be specified multiple times for each
-possible "blog_id". This is a whitelist. If a comment is submitted to a blog_id
-that isn't one of these, then it will be rejected.
+"allowed_url" can be specified multiple times and is only used to ensure that
+the "blog_url" passed to "{BASE_URL}/do_comment?..." starts with one of
+"allowed_url".
+
+"allowed_bid" in the config can be specified multiple times for each possible
+"blog_id". This is a whitelist. If a comment is submitted to a blog_id that
+isn't one of these, then it will be rejected.
+
+"admin" can also be specified multiple times, and should be set to the
+"github login" of users to be admins. Admins can delete anyone's comment.
 
 
 ================================================================================
