@@ -22,11 +22,15 @@ async function load_blog_comments(blog_id, blog_url, base_url) {
       for (let idx = 0; idx < json_arr.length; ++idx) {
         let br_elem = document.createElement("br");
         comment_div.appendChild(br_elem);
+        let a_img = document.createElement("a");
+        a_img.setAttribute("href", "#" + blog_id + "comment" + json_arr[idx].comment_id);
+        a_img.setAttribute("id", blog_id + "comment" + json_arr[idx].comment_id);
         let img_elem = document.createElement("img");
         img_elem.setAttribute("width", "64");
         img_elem.setAttribute("height", "64");
         img_elem.setAttribute("src", json_arr[idx].useravatar);
-        comment_div.appendChild(img_elem);
+        a_img.appendChild(img_elem);
+        comment_div.appendChild(a_img);
         let bold_elem = document.createElement("b");
         bold_elem.innerText = json_arr[idx].username;
         comment_div.appendChild(bold_elem);
@@ -56,6 +60,12 @@ async function load_blog_comments(blog_id, blog_url, base_url) {
           window.location = base_url + "/del_comment?comment_id=" + json_arr[idx].comment_id + "&blog_url=" + blog_url_encoded;
         };
         comment_div.appendChild(delete_button);
+      }
+    }
+    if (window.location.hash.length > 1) {
+      let item = document.getElementById(window.location.hash.substring(1));
+      if (item !== null) {
+        item.scrollIntoView();
       }
     }
   } catch (error) {
