@@ -14,14 +14,11 @@
 // OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 // PERFORMANCE OF THIS SOFTWARE.
 
-use std::thread::sleep;
-use std::time::Duration;
-
 use crate::error::Error;
 use mysql::prelude::*;
 use mysql::*;
 use serde::Serialize;
-use time::{PrimitiveDateTime, UtcDateTime, UtcOffset, format_description};
+use time::{PrimitiveDateTime, UtcOffset, format_description};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Comment {
@@ -55,52 +52,53 @@ pub struct PseudoComment {
     pub comment_id: String,
 }
 
-pub fn set_up_sql_db(conn_str: &str) -> Result<(), Error> {
+pub fn set_up_sql_db(conn_str: &str, db_name: &str) -> Result<(), Error> {
     let pool = Pool::new(conn_str)?;
 
     let mut conn = pool.get_conn()?;
 
     conn.query_drop(
-        r"CREATE TABLE IF NOT EXISTS COMMENT (
+        r"CREATE TABLE IF NOT EXISTS COMMENT2 (
             uuid CHAR(36) PRIMARY KEY,
-            blog_post_id TINYTEXT NOT NULL,
-            INDEX blog_post_id_index USING HASH (blog_post_id),
-            user_id BIGINT NOT NULL,
-            INDEX user_id_index USING HASH (user_id),
-            username TINYTEXT NOT NULL,
-            userurl TINYTEXT NOT NULL,
-            useravatar TINYTEXT NOT NULL,
-            creation_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            INDEX creation_date_index USING BTREE (creation_date),
-            edit_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            comment TEXT NOT NULL
-        )",
-    )?;
-
-    conn.query_drop(
-        r"CREATE TABLE IF NOT EXISTS PSEUDO_COMMENT (
-            uuid CHAR(36) PRIMARY KEY,
-            state CHAR(36) NOT NULL UNIQUE,
-            user_id BIGINT NOT NULL,
-            username TINYTEXT NOT NULL,
-            userurl TINYTEXT NOT NULL,
-            useravatar TINYTEXT NOT NULL,
+            state CHAR(36),
+            INDEX state_index USING HASH (state),
             blog_post_id TINYTEXT,
-            comment_id TINYTEXT,
-            date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            date2 DATETIME NOT NULL DEFAULT ADDTIME(CURRENT_TIMESTAMP, '00:00:01'),
-            PERIOD FOR date_period(date, date2)
+            INDEX blog_post_id_index USING HASH (blog_post_id),
+            user_id BIGINT,
+            INDEX user_id_index USING HASH (user_id),
+            username TINYTEXT,
+            userurl TINYTEXT,
+            useravatar TINYTEXT,
+            creation_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX creation_date_index USING BTREE (creation_date),
+            edit_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+            timeout_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+            comment TEXT
         )",
     )?;
 
-    conn.query_drop(
-        r"CREATE TABLE IF NOT EXISTS GITHUB_RNG (
-            uuid CHAR(36) PRIMARY KEY,
-            date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            date2 DATETIME NOT NULL DEFAULT ADDTIME(CURRENT_TIMESTAMP, '00:00:01'),
-            PERIOD FOR date_period(date, date2)
-        )",
-    )?;
+    {
+        // Migrate from COMMENT to COMMENT2 if exists.
+        let row: Option<Row> = conn.exec_first(
+            "SELECT * FROM information_schema.tables WHERE table_schema = ? AND table_name = 'COMMENT'",
+            (db_name,),
+        )?;
+
+        if row.is_some() {
+            conn.query_drop(
+                r"INSERT INTO COMMENT2 (uuid, blog_post_id, user_id, username, userurl, useravatar, creation_date, edit_date, comment, timeout_date)
+                    SELECT uuid, blog_post_id, user_id, username, userurl, useravatar, creation_date, edit_date, comment, NULL FROM COMMENT
+                "
+            )?;
+
+            conn.query_drop(r"DROP TABLE COMMENT")?;
+        }
+    }
+
+    // Drop unused tables. The data in these tables were meant to be temporary
+    // so no migration is required for them.
+    conn.query_drop(r"DROP TABLE IF EXISTS PSEUDO_COMMENT")?;
+    conn.query_drop(r"DROP TABLE IF EXISTS GITHUB_RNG")?;
 
     Ok(())
 }
@@ -108,21 +106,19 @@ pub fn set_up_sql_db(conn_str: &str) -> Result<(), Error> {
 pub fn has_psuedo_commment_with_state(conn: &mut PooledConn, state: &str) -> Result<bool, Error> {
     Ok(conn
         .exec_first::<String, &'static str, (&str,)>(
-            "SELECT state FROM PSEUDO_COMMENT WHERE state = ?",
+            "SELECT uuid FROM COMMENT2 WHERE uuid = ?",
             (state,),
         )?
         .is_some())
 }
 
-pub fn create_rng_uuid(conn_str: &str) -> Result<String, Error> {
+pub fn create_rng_uuid(conn_str: &str, uuid: Option<&str>) -> Result<String, Error> {
     let pool = Pool::new(conn_str)?;
 
     let mut conn = pool.get_conn()?;
 
     conn.query_drop(
-        r"DELETE FROM GITHUB_RNG
-        FOR PORTION OF date_period
-        FROM '0-0-0' TO SUBDATE(CURRENT_TIMESTAMP, INTERVAL 60 MINUTE)",
+        r"DELETE FROM COMMENT2 WHERE timeout_date IS NOT NULL AND TIMESTAMPDIFF(MINUTE, timeout_date, CURRENT_TIMESTAMP) > 60"
     )?;
 
     let mut rng_uuid = uuid::Uuid::new_v4();
@@ -133,50 +129,52 @@ pub fn create_rng_uuid(conn_str: &str) -> Result<String, Error> {
 
     let rng_uuid_string = rng_uuid.to_string();
 
-    conn.exec_drop(
-        r"INSERT INTO GITHUB_RNG (uuid) VALUES (?)",
-        (&rng_uuid_string,),
-    )?;
+    if let Some(uuid_str) = uuid {
+        conn.exec_drop(
+            r"UPDATE COMMENT2 SET state = ? WHERE uuid = ? AND timeout_date IS NULL",
+            (&rng_uuid_string, uuid_str),
+        )?;
+        conn.exec_first::<String, &'static str, (&str,)>(
+            r"SELECT state FROM COMMENT2 WHERE state IS NOT NULL AND uuid = ?",
+            (uuid_str,),
+        )?
+        .ok_or(Error::Generic(
+            "Failed to add state to existing comment!".into(),
+        ))?;
+    } else {
+        conn.exec_drop(
+            r"INSERT INTO COMMENT2 (uuid) VALUES (?)",
+            (&rng_uuid_string,),
+        )?;
+    }
 
     Ok(rng_uuid_string)
 }
 
-pub fn check_rng_uuid(conn_str: &str, uuid: &str) -> Result<bool, Error> {
+pub fn check_rng_uuid(conn_str: &str, uuid: &str, state: Option<&str>) -> Result<bool, Error> {
     let pool = Pool::new(conn_str)?;
 
     let mut conn = pool.get_conn()?;
 
     conn.query_drop(
-        r"DELETE FROM GITHUB_RNG
-        FOR PORTION OF date_period
-        FROM '0-0-0' TO SUBDATE(CURRENT_TIMESTAMP, INTERVAL 60 MINUTE)",
+        r"DELETE FROM COMMENT2 WHERE timeout_date IS NOT NULL AND TIMESTAMPDIFF(MINUTE, timeout_date, CURRENT_TIMESTAMP) > 60"
     )?;
 
-    let ret: Option<String> =
-        conn.exec_first(r"SELECT uuid FROM GITHUB_RNG WHERE uuid = ?", (uuid,))?;
+    if let Some(state) = state {
+        let ret: Option<String> = conn.exec_first(
+            r"SELECT uuid FROM COMMENT2 WHERE uuid = ? AND state = ? AND timeout_date IS NULL",
+            (uuid, state),
+        )?;
 
-    Ok(ret.is_some())
-}
+        Ok(ret.is_some())
+    } else {
+        let ret: Option<String> = conn.exec_first(
+            r"SELECT uuid FROM COMMENT2 WHERE uuid = ? AND timeout_date IS NOT NULL",
+            (uuid,),
+        )?;
 
-pub fn check_remove_rng_uuid(conn_str: &str, uuid: &str) -> Result<bool, Error> {
-    let pool = Pool::new(conn_str)?;
-
-    let mut conn = pool.get_conn()?;
-
-    conn.query_drop(
-        r"DELETE FROM GITHUB_RNG
-        FOR PORTION OF date_period
-        FROM '0-0-0' TO SUBDATE(CURRENT_TIMESTAMP, INTERVAL 60 MINUTE)",
-    )?;
-
-    let ret: Option<String> =
-        conn.exec_first(r"SELECT uuid FROM GITHUB_RNG WHERE uuid = ?", (uuid,))?;
-
-    if let Some(ret_uuid) = &ret {
-        conn.exec_drop(r"DELETE FROM GITHUB_RNG WHERE uuid = ?", (ret_uuid,))?;
+        Ok(ret.is_some())
     }
-
-    Ok(ret.is_some())
 }
 
 pub fn add_pseudo_comment_data(
@@ -194,28 +192,29 @@ pub fn add_pseudo_comment_data(
     let mut conn = pool.get_conn()?;
 
     conn.query_drop(
-        r"DELETE FROM PSEUDO_COMMENT
-        FOR PORTION OF date_period
-        FROM '0-0-0' TO SUBDATE(CURRENT_TIMESTAMP, INTERVAL 60 MINUTE)",
+        r"DELETE FROM COMMENT2 WHERE timeout_date IS NOT NULL AND TIMESTAMPDIFF(MINUTE, timeout_date, CURRENT_TIMESTAMP) > 60"
     )?;
 
-    let uuid_string: String;
-
-    loop {
-        let uuid = uuid::Uuid::new_v4();
-        let row_opt: Option<Row> = conn.exec_first(
-            "SELECT uuid FROM PSEUDO_COMMENT WHERE uuid = ?",
-            (uuid.to_string(),),
+    if let Some(blog_id) = blog_post_id {
+        conn.exec_first::<String, &'static str, (&str,)>(
+            r"SELECT uuid FROM COMMENT2 WHERE uuid = ? AND timeout_date IS NOT NULL",
+            (state,),
+        )?
+        .ok_or(Error::Generic("Timed out creating comment!".into()))?;
+        conn.exec_drop(r"UPDATE COMMENT2 SET user_id=?, username=?, userurl=?, useravatar=?, blog_post_id=? WHERE uuid = ?", (user_id, user_name, user_url, user_avatar_url, blog_id, state))?;
+    } else if let Some(comment_id) = comment_id {
+        conn.exec_first::<String, &'static str, (&str, &str)>(
+            r"SELECT uuid FROM COMMENT2 WHERE uuid = ? AND state = ? AND timeout_date IS NULL",
+            (comment_id, state),
+        )?
+        .ok_or(Error::Generic("Timed out creating comment!".into()))?;
+        conn.exec_drop(
+            r"UPDATE COMMENT2 SET user_id=?, username=?, userurl=?, useravatar=?, state=NULL WHERE uuid = ?",
+            (user_id, user_name, user_url, user_avatar_url, comment_id),
         )?;
-        if row_opt.is_none() {
-            uuid_string = uuid.to_string();
-            break;
-        }
     }
 
-    conn.exec_drop(r"INSERT INTO PSEUDO_COMMENT (uuid, state, user_id, username, userurl, useravatar, blog_post_id, comment_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (&uuid_string, state, user_id, user_name, user_url, user_avatar_url, blog_post_id, comment_id))?;
-
-    Ok(uuid_string)
+    Ok(state.to_string())
 }
 
 pub fn add_comment(conn_str: &str, state: &str, comment: &str) -> Result<PseudoComment, Error> {
@@ -223,8 +222,23 @@ pub fn add_comment(conn_str: &str, state: &str, comment: &str) -> Result<PseudoC
 
     let mut conn = pool.get_conn()?;
 
+    conn.query_drop(
+        r"DELETE FROM COMMENT2 WHERE timeout_date IS NOT NULL AND TIMESTAMPDIFF(MINUTE, timeout_date, CURRENT_TIMESTAMP) > 60"
+    )?;
+
+    conn.exec_first::<String, &'static str, (&str,)>(
+        r"SELECT uuid FROM COMMENT2 WHERE uuid = ?",
+        (state,),
+    )?
+    .ok_or(Error::Generic("Timed out creating comment!".into()))?;
+
+    conn.exec_drop(
+        "UPDATE COMMENT2 SET timeout_date=NULL, comment=? WHERE uuid = ?",
+        (comment, state),
+    )?;
+
     let pseudo_comment = conn.exec_map(
-        "SELECT user_id, username, userurl, useravatar, blog_post_id FROM PSEUDO_COMMENT WHERE state = ?",
+        "SELECT user_id, username, userurl, useravatar, blog_post_id FROM COMMENT2 WHERE uuid = ?",
         (state,),
         |(user_id, username, userurl, useravatar, blog_post_id)| PseudoComment {
             user_id,
@@ -236,41 +250,6 @@ pub fn add_comment(conn_str: &str, state: &str, comment: &str) -> Result<PseudoC
         },
     )?;
 
-    if pseudo_comment.is_empty() {
-        return Err(Error::from(
-            "PsuedoComment not found, Commentor not authenticated or timed out!",
-        ));
-    }
-
-    let mut combined: String = pseudo_comment[0].blog_post_id.clone();
-    combined.push_str(&pseudo_comment[0].user_id.to_string());
-    let utc_time: UtcDateTime = UtcDateTime::now();
-    combined.push_str(&utc_time.to_string());
-
-    let namespace = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_DNS, "seodisparate.com".as_bytes());
-    let mut uuid = uuid::Uuid::new_v5(&namespace, combined.as_bytes());
-    let mut uuid_str = uuid.to_string();
-
-    loop {
-        let row_opt: Option<Row> =
-            conn.exec_first("SELECT uuid FROM COMMENT WHERE uuid = ?", (&uuid_str,))?;
-        if row_opt.is_some() {
-            sleep(Duration::from_secs(1));
-            let utc_time = UtcDateTime::now();
-            combined = pseudo_comment[0].blog_post_id.clone();
-            combined.push_str(&pseudo_comment[0].user_id.to_string());
-            combined.push_str(&utc_time.to_string());
-            uuid = uuid::Uuid::new_v5(&namespace, combined.as_bytes());
-            uuid_str = uuid.to_string();
-        } else {
-            break;
-        }
-    }
-
-    conn.exec_drop("INSERT INTO COMMENT (uuid, blog_post_id, user_id, username, userurl, useravatar, comment) VALUES (?, ?, ?, ?, ?, ?, ?)", (uuid_str, &pseudo_comment[0].blog_post_id, pseudo_comment[0].user_id, &pseudo_comment[0].username, &pseudo_comment[0].userurl, &pseudo_comment[0].useravatar, comment))?;
-
-    conn.exec_drop("DELETE FROM PSEUDO_COMMENT WHERE state = ?", (state,))?;
-
     Ok(pseudo_comment[0].clone())
 }
 
@@ -280,7 +259,7 @@ pub fn check_edit_comment_auth(conn_str: &str, cid: &str, uid: &str) -> Result<b
     let mut conn = pool.get_conn()?;
 
     let row_opt: Option<Row> = conn.exec_first(
-        "SELECT uuid FROM COMMENT WHERE uuid = ? AND user_id = ?",
+        "SELECT uuid FROM COMMENT2 WHERE uuid = ? AND user_id = ?",
         (cid, uid),
     )?;
 
@@ -293,7 +272,7 @@ pub fn get_comment_text(conn_str: &str, cid: &str) -> Result<String, Error> {
     let mut conn = pool.get_conn()?;
 
     let mut row: Row = conn
-        .exec_first("SELECT comment from COMMENT WHERE uuid = ?", (cid,))?
+        .exec_first("SELECT comment from COMMENT2 WHERE uuid = ?", (cid,))?
         .ok_or(Error::from("Editing comment: Comment not found!"))?;
 
     row.take::<String, usize>(0).ok_or(Error::from(
@@ -301,33 +280,15 @@ pub fn get_comment_text(conn_str: &str, cid: &str) -> Result<String, Error> {
     ))
 }
 
-pub fn edit_comment(conn_str: &str, state: &str, comment: &str) -> Result<(), Error> {
+pub fn edit_comment(conn_str: &str, uuid: &str, comment: &str) -> Result<(), Error> {
     let pool = Pool::new(conn_str)?;
 
     let mut conn = pool.get_conn()?;
 
-    let pseudo_comment = conn.exec_map(
-        "SELECT user_id, username, userurl, useravatar, comment_id FROM PSEUDO_COMMENT WHERE state = ?",
-        (state,),
-        |(user_id, username, userurl, useravatar, comment_id)| PseudoComment {
-            user_id,
-            username,
-            userurl,
-            useravatar,
-            blog_post_id: String::new(),
-            comment_id,
-        },
+    conn.exec_drop(
+        "UPDATE COMMENT2 SET edit_date = CURRENT_TIMESTAMP, comment = ? WHERE uuid = ?",
+        (comment, uuid),
     )?;
-
-    if pseudo_comment.is_empty() {
-        return Err(Error::from(
-            "PsuedoComment not found, Commentor not authenticated or timed out!",
-        ));
-    }
-
-    conn.exec_drop("UPDATE COMMENT SET username = ?, userurl = ?, useravatar = ?, edit_date = CURRENT_TIMESTAMP, comment = ? WHERE uuid = ?", (&pseudo_comment[0].username, &pseudo_comment[0].userurl, &pseudo_comment[0].useravatar, comment, &pseudo_comment[0].comment_id))?;
-
-    conn.exec_drop("DELETE FROM PSEUDO_COMMENT WHERE state = ?", (state,))?;
 
     Ok(())
 }
@@ -338,7 +299,7 @@ pub fn try_delete_comment(conn_str: &str, cid: &str, uid: u64) -> Result<(), Err
     let mut conn = pool.get_conn()?;
 
     conn.exec_drop(
-        "DELETE FROM COMMENT WHERE uuid = ? AND user_id = ?",
+        "DELETE FROM COMMENT2 WHERE uuid = ? AND user_id = ?",
         (cid, uid),
     )?;
 
@@ -350,7 +311,7 @@ pub fn try_delete_comment_id_only(conn_str: &str, cid: &str) -> Result<(), Error
 
     let mut conn = pool.get_conn()?;
 
-    conn.exec_drop("DELETE FROM COMMENT WHERE uuid = ?", (cid,))?;
+    conn.exec_drop("DELETE FROM COMMENT2 WHERE uuid = ?", (cid,))?;
 
     Ok(())
 }
@@ -367,7 +328,7 @@ pub fn get_comments_per_blog_id(conn_str: &str, blog_id: &str) -> Result<Vec<Com
     )?;
 
     let pre_proc_comments = conn.exec_map(
-        "SELECT uuid, username, userurl, useravatar, creation_date, edit_date, comment FROM COMMENT WHERE blog_post_id = ? ORDER BY creation_date",
+        "SELECT uuid, username, userurl, useravatar, creation_date, edit_date, comment FROM COMMENT2 WHERE blog_post_id = ? ORDER BY creation_date",
         (blog_id,), |(uuid, username, userurl, useravatar, creation_date, edit_date, comment)| {
             let create_time: PrimitiveDateTime = creation_date;
             let edit_time: PrimitiveDateTime = edit_date;
@@ -398,4 +359,21 @@ pub fn get_comments_per_blog_id(conn_str: &str, blog_id: &str) -> Result<Vec<Com
     }
 
     Ok(comments)
+}
+
+pub fn get_blog_id_by_comment_id(conn_str: &str, cid: &str) -> Result<String, Error> {
+    let pool = Pool::new(conn_str)?;
+
+    let mut conn = pool.get_conn()?;
+
+    let mut row: Row = conn
+        .exec_first(
+            r"SELECT blog_post_id FROM COMMENT2 WHERE uuid = ? AND timeout_date IS NULL",
+            (cid,),
+        )?
+        .ok_or(Error::Generic("Comment not found!".into()))?;
+
+    Ok(row
+        .take(0)
+        .ok_or(Error::Generic("Internal Error, Comment not found!".into()))?)
 }

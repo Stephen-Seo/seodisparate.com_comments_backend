@@ -163,7 +163,7 @@ pub const EDIT_COMMENT_PAGE: &str = r#"
                 button.addEventListener("click", (e) => {
                     let submit_obj = {};
                     submit_obj.comment_text = textarea.value;
-                    submit_obj.state = "{STATE_STRING}";
+                    submit_obj.comment_id = "{COMMENT_ID}";
                     let submit_json = JSON.stringify(submit_obj);
                     submit_comment(submit_json);
                 });
@@ -176,6 +176,7 @@ pub const EDIT_COMMENT_PAGE: &str = r#"
 #[derive(Default, Clone, Debug)]
 struct Config {
     db_conn_string: String,
+    db_db: String,
     oauth_user: String,
     oauth_token: String,
     base_url: String,
@@ -253,10 +254,16 @@ async fn login_to_comment(
         ));
         return Ok(());
     }
-    let uuid = sql::create_rng_uuid(&salvo_conf.db_conn_string)?;
+    let uuid = sql::create_rng_uuid(&salvo_conf.db_conn_string, None)?;
     let redirect_url = Url::parse_with_params(
         &format!("{}/github_auth_make_comment", salvo_conf.base_url),
-        &[("blog_id", blog_id), ("blog_url", blog_url)],
+        &[
+            ("blog_id", &blog_id),
+            (
+                "blog_url",
+                &format!("{}#{}comment{}", blog_url, &blog_id, &uuid),
+            ),
+        ],
     )
     .map_err(|_| Error::from("Failed to parse redirect url!"))?;
     let github_api_url = Url::parse_with_params(
@@ -306,7 +313,7 @@ async fn github_auth_make_comment(
 
     let salvo_conf = depot.obtain::<Config>().unwrap();
 
-    let is_state_valid = sql::check_rng_uuid(&salvo_conf.db_conn_string, &state)?;
+    let is_state_valid = sql::check_rng_uuid(&salvo_conf.db_conn_string, &state, None)?;
     if !is_state_valid {
         eprintln!("State is invalid (timed out?)!\n");
         res.status_code(StatusCode::BAD_REQUEST);
@@ -321,7 +328,13 @@ async fn github_auth_make_comment(
 
     let redirect_url = Url::parse_with_params(
         &format!("{}/github_auth_make_comment", salvo_conf.base_url),
-        &[("blog_id", &blog_id), ("blog_url", &blog_url)],
+        &[
+            ("blog_id", &blog_id),
+            (
+                "blog_url",
+                &format!("{}#{}comment{}", blog_url, &blog_id, &state),
+            ),
+        ],
     )
     .map_err(|_| Error::from("Failed to parse redirect url!"))?;
 
@@ -475,8 +488,6 @@ async fn submit_comment(req: &mut Request, depot: &mut Depot) -> Result<(), Erro
         }
     }
 
-    let _did_remove = sql::check_remove_rng_uuid(&salvo_conf.db_conn_string, req_state)?;
-
     Ok(())
 }
 
@@ -493,10 +504,18 @@ async fn login_to_edit_comment(
     let blog_url: String = req
         .try_query("blog_url")
         .map_err(Error::err_to_client_err)?;
-    let uuid = sql::create_rng_uuid(&salvo_conf.db_conn_string)?;
+    let uuid = sql::create_rng_uuid(&salvo_conf.db_conn_string, Some(&comment_id))?;
+    let blog_id: String = sql::get_blog_id_by_comment_id(&salvo_conf.db_conn_string, &comment_id)?;
     let redirect_url = Url::parse_with_params(
         &format!("{}/github_auth_edit_comment", salvo_conf.base_url),
-        &[("comment_id", comment_id), ("blog_url", blog_url)],
+        &[
+            ("comment_id", &comment_id),
+            ("blog_id", &blog_id),
+            (
+                "blog_url",
+                &format!("{}#{}comment{}", blog_url, &blog_id, &comment_id),
+            ),
+        ],
     )
     .map_err(|_| Error::from("Failed to parse redirect url!"))?;
     let github_api_url = Url::parse_with_params(
@@ -536,6 +555,7 @@ async fn github_auth_edit_comment(
     res: &mut Response,
     depot: &mut Depot,
 ) -> Result<(), Error> {
+    let blog_id: String = req.try_query("blog_id").map_err(Error::err_to_client_err)?;
     let comment_id: String = req
         .try_query("comment_id")
         .map_err(Error::err_to_client_err)?;
@@ -547,7 +567,8 @@ async fn github_auth_edit_comment(
 
     let salvo_conf = depot.obtain::<Config>().unwrap();
 
-    let is_state_valid = sql::check_rng_uuid(&salvo_conf.db_conn_string, &state)?;
+    let is_state_valid =
+        sql::check_rng_uuid(&salvo_conf.db_conn_string, &comment_id, Some(&state))?;
     if !is_state_valid {
         eprintln!("State is invalid (timed out?)!\n");
         res.status_code(StatusCode::BAD_REQUEST);
@@ -559,10 +580,15 @@ async fn github_auth_edit_comment(
         ));
         return Ok(());
     }
-
     let redirect_url = Url::parse_with_params(
         &format!("{}/github_auth_edit_comment", salvo_conf.base_url),
-        &[("comment_id", &comment_id)],
+        &[
+            ("blog_id", &blog_id),
+            (
+                "blog_url",
+                &format!("{}#{}comment{}", blog_url, &blog_id, &comment_id),
+            ),
+        ],
     )
     .map_err(|_| Error::from("Failed to parse redirect url!"))?;
 
@@ -695,7 +721,6 @@ async fn github_auth_edit_comment(
             .replace("{USER_PROFILE}", user_url)
             .replace("{BASE_URL}", &salvo_conf.base_url)
             .replace("{BLOG_URL}", &blog_url)
-            .replace("{STATE_STRING}", &state)
             .replace("{COMMENT_ID}", &comment_id),
     );
 
@@ -709,8 +734,8 @@ async fn submit_edit_comment(req: &mut Request, depot: &mut Depot) -> Result<(),
     let request_json: serde_json::Value =
         req.parse_json().await.map_err(Error::err_to_client_err)?;
 
-    let req_state = request_json
-        .get("state")
+    let req_comment_id = request_json
+        .get("comment_id")
         .ok_or(Error::from("JSON parse error: \"state\"").into_client_err())?
         .as_str()
         .ok_or(Error::from("JSON parse error: \"state\"").into_client_err())?;
@@ -720,9 +745,7 @@ async fn submit_edit_comment(req: &mut Request, depot: &mut Depot) -> Result<(),
         .as_str()
         .ok_or(Error::from("JSON parse error: \"comment_text\"").into_client_err())?;
 
-    sql::edit_comment(&salvo_conf.db_conn_string, req_state, req_comment)?;
-
-    let _did_remove = sql::check_remove_rng_uuid(&salvo_conf.db_conn_string, req_state)?;
+    sql::edit_comment(&salvo_conf.db_conn_string, req_comment_id, req_comment)?;
 
     Ok(())
 }
@@ -741,7 +764,7 @@ async fn login_to_delete_comment(
     let blog_url: String = req
         .try_query("blog_url")
         .map_err(Error::err_to_client_err)?;
-    let uuid = sql::create_rng_uuid(&salvo_conf.db_conn_string)?;
+    let uuid = sql::create_rng_uuid(&salvo_conf.db_conn_string, Some(&comment_id))?;
     let redirect_url = Url::parse_with_params(
         &format!("{}/github_auth_del_comment", salvo_conf.base_url),
         &[("comment_id", comment_id), ("blog_url", blog_url)],
@@ -795,7 +818,8 @@ async fn github_auth_del_comment(
 
     let salvo_conf = depot.obtain::<Config>().unwrap();
 
-    let is_state_valid = sql::check_rng_uuid(&salvo_conf.db_conn_string, &state)?;
+    let is_state_valid =
+        sql::check_rng_uuid(&salvo_conf.db_conn_string, &comment_id, Some(&state))?;
     if !is_state_valid {
         eprintln!("State is invalid (timed out?)!\n");
         res.status_code(StatusCode::BAD_REQUEST);
@@ -908,8 +932,6 @@ async fn github_auth_del_comment(
         sql::try_delete_comment(&salvo_conf.db_conn_string, &comment_id, user_id)?;
     }
 
-    let _did_remove = sql::check_remove_rng_uuid(&salvo_conf.db_conn_string, &state)?;
-
     let script = format!(
         r#"
             "use strict;"
@@ -958,6 +980,7 @@ async fn main() {
 
     let salvo_conf = Config {
         db_conn_string: config.get_connection_string(),
+        db_db: config.get_sql_db().to_owned(),
         oauth_user: config.get_oauth_user().to_owned(),
         oauth_token: config.get_oauth_token().to_owned(),
         base_url: config.get_base_url().to_owned(),
@@ -968,7 +991,7 @@ async fn main() {
         admins: config.get_admins().to_vec(),
     };
 
-    sql::set_up_sql_db(&salvo_conf.db_conn_string).unwrap();
+    sql::set_up_sql_db(&salvo_conf.db_conn_string, &salvo_conf.db_db).unwrap();
 
     let router = Router::new()
         .hoop(affix_state::inject(salvo_conf))

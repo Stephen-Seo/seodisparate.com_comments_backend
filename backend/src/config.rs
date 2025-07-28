@@ -47,6 +47,10 @@ impl Config {
         )
     }
 
+    pub fn get_sql_db(&self) -> &str {
+        &self.sql_db
+    }
+
     pub fn get_addr(&self) -> &str {
         &self.tcp_addr
     }
