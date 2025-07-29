@@ -65,7 +65,7 @@ pub const WRITE_COMMENT_PAGE: &str = r#"
         <button id="comment_submit_button">Submit</button><br>
         <p id="status_paragraph"></p>
         <script>
-            "use strict;"
+            "use strict";
 
             async function submit_comment(json) {
                 const response = await fetch("{BASE_URL}/submit_comment",
@@ -124,7 +124,7 @@ pub const EDIT_COMMENT_PAGE: &str = r#"
         <button id="comment_submit_button">Submit</button><br>
         <p id="status_paragraph"></p>
         <script>
-            "use strict;"
+            "use strict";
 
             async function populate_textarea(ta, cid) {
                 const response = await fetch("{BASE_URL}/get_comment?comment_id=" + cid);
@@ -277,7 +277,7 @@ async fn login_to_comment(
     .map_err(|_| Error::from("Failed to parse github api url!"))?;
     let script = format!(
         r#"
-            "use strict;"
+            "use strict";
             setTimeout(() => {{
                 window.location = "{}";
             }}, 3000);
@@ -529,7 +529,7 @@ async fn login_to_edit_comment(
     .map_err(|_| Error::from("Failed to parse github api url!"))?;
     let script = format!(
         r#"
-            "use strict;"
+            "use strict";
             setTimeout(() => {{
                 window.location = "{}";
             }}, 3000);
@@ -781,7 +781,7 @@ async fn login_to_delete_comment(
     .map_err(|_| Error::from("Failed to parse github api url!"))?;
     let script = format!(
         r#"
-            "use strict;"
+            "use strict";
             setTimeout(() => {{
                 window.location = "{}";
             }}, 3000);
@@ -934,7 +934,7 @@ async fn github_auth_del_comment(
 
     let script = format!(
         r#"
-            "use strict;"
+            "use strict";
             setTimeout(() => {{
                 window.location = "{}";
             }}, 5000);
