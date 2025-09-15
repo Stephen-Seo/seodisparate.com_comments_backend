@@ -1812,9 +1812,9 @@ checksum = "28d3b2b1366ec20994f1fd18c3c594f05c5dd4bc44d8bb0c1c632c8d6829481f"
 
 [[package]]
 name = "salvo"
-version = "0.79.0"
+version = "0.84.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca8e3fda2c363337d9179477b947546433da95c94d7d2ba325e21fa9c314ff78"
+checksum = "ad6f4e26c89c459dd176ab6ea24637c93d43da3364a21edcadd2da1e8e66ed25"
 dependencies = [
  "salvo-jwt-auth",
  "salvo-proxy",
@@ -1824,9 +1824,9 @@ dependencies = [
 
 [[package]]
 name = "salvo-jwt-auth"
-version = "0.79.0"
+version = "0.84.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88690329319f476e45ea15208f947dd0f162388dcfb14f34b9fbd665e11ca286"
+checksum = "156f8dc72dd4e7c8d6b087a2a5846b02d21335ae332029f87ea9f2a289b7935a"
 dependencies = [
  "base64",
  "bytes",
@@ -1844,9 +1844,9 @@ dependencies = [
 
 [[package]]
 name = "salvo-proxy"
-version = "0.79.0"
+version = "0.84.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ac4a3774c12134537dbf7b4de0a3a33355bc8181b7aedecf2e676f6155c16dd"
+checksum = "5652047c151c7b24506e0c6ed8f7dc2fcb70e3334bdc1d7051ef2b3d9a08fd60"
 dependencies = [
  "fastrand",
  "futures-util",
@@ -1862,9 +1862,9 @@ dependencies = [
 
 [[package]]
 name = "salvo-serde-util"
-version = "0.79.0"
+version = "0.84.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7bf8b2a2576a893b80542c400ae4d3b1b1a903ad400ce6a7affe930e4ad9346d"
+checksum = "95ae7e72ab1551e8c1a5b588441c472db2c37c3b25d3b7af6b7bceb52826be64"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1873,9 +1873,9 @@ dependencies = [
 
 [[package]]
 name = "salvo_core"
-version = "0.79.0"
+version = "0.84.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7a887d957cfc87e4f25e33d37bfc8aac0544ab95478b4620faaa2f0be522c27"
+checksum = "59e4be0500f04a7a7534eb55f8a7c365fac094e77c9b3b5bcd5a008d76e81278"
 dependencies = [
  "async-trait",
  "base64",
@@ -1918,9 +1918,9 @@ dependencies = [
 
 [[package]]
 name = "salvo_extra"
-version = "0.79.0"
+version = "0.84.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e46102411306233ca4c5f225a494e561d3f8789f8af81f4d146f01c47c652036"
+checksum = "b137e510a35424bc4feae1970c48f996a6e07c92f8248e85365100fc82465aaf"
 dependencies = [
  "base64",
  "etag",
@@ -1940,9 +1940,9 @@ dependencies = [
 
 [[package]]
 name = "salvo_macros"
-version = "0.79.0"
+version = "0.84.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc781932226f47832bff8e11d32d2c799081b08116cdfe212712095aa908a7af"
+checksum = "43d891c4a5df7c1618872c0ffd4d646d92caf737980334baa74f222901d43977"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -2402,9 +2402,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-tungstenite"
-version = "0.26.2"
+version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a9daff607c6d2bf6c16fd681ccb7eecc83e4e2cdc1ca067ffaadfca5de7f084"
+checksum = "489a59b6730eda1b0171fcfda8b121f4bee2b35cba8645ca35c5f7ba3eb736c1"
 dependencies = [
  "futures-util",
  "log",
@@ -2528,9 +2528,9 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tungstenite"
-version = "0.26.2"
+version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4793cb5e56680ecbb1d843515b23b6de9a75eb04b66643e256a396d43be33c13"
+checksum = "eadc29d668c91fcc564941132e17b28a7ceb2f3ebf0b9dae3e03fd7a6748eb0d"
 dependencies = [
  "bytes",
  "log",
