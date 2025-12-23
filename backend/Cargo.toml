@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-salvo = { version = "0.84", features = ["affix-state"] }
+salvo = { version = "0.85", features = ["affix-state"] }
 reqwest = { version = "0.12", features = ["json", "native-tls-vendored"] }
 tokio = "1.48"
 mysql = { version = "26.0", features = ["time"] }
