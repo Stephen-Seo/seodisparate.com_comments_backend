@@ -52,9 +52,7 @@ pub struct PseudoComment {
     pub comment_id: String,
 }
 
-pub fn set_up_sql_db(conn_str: &str, db_name: &str) -> Result<(), Error> {
-    let pool = Pool::new(conn_str)?;
-
+pub fn set_up_sql_db(pool: &Pool, db_name: &str) -> Result<(), Error> {
     let mut conn = pool.get_conn()?;
 
     conn.query_drop(
@@ -112,9 +110,7 @@ pub fn has_psuedo_commment_with_state(conn: &mut PooledConn, state: &str) -> Res
         .is_some())
 }
 
-pub fn create_rng_uuid(conn_str: &str, uuid: Option<&str>) -> Result<String, Error> {
-    let pool = Pool::new(conn_str)?;
-
+pub fn create_rng_uuid(pool: &Pool, uuid: Option<&str>) -> Result<String, Error> {
     let mut conn = pool.get_conn()?;
 
     conn.query_drop(
@@ -151,9 +147,7 @@ pub fn create_rng_uuid(conn_str: &str, uuid: Option<&str>) -> Result<String, Err
     Ok(rng_uuid_string)
 }
 
-pub fn check_rng_uuid(conn_str: &str, uuid: &str, state: Option<&str>) -> Result<bool, Error> {
-    let pool = Pool::new(conn_str)?;
-
+pub fn check_rng_uuid(pool: &Pool, uuid: &str, state: Option<&str>) -> Result<bool, Error> {
     let mut conn = pool.get_conn()?;
 
     conn.query_drop(
@@ -178,7 +172,7 @@ pub fn check_rng_uuid(conn_str: &str, uuid: &str, state: Option<&str>) -> Result
 }
 
 pub fn add_pseudo_comment_data(
-    conn_str: &str,
+    pool: &Pool,
     state: &str,
     user_id: u64,
     user_name: &str,
@@ -187,8 +181,6 @@ pub fn add_pseudo_comment_data(
     blog_post_id: Option<&str>,
     comment_id: Option<&str>,
 ) -> Result<String, Error> {
-    let pool = Pool::new(conn_str)?;
-
     let mut conn = pool.get_conn()?;
 
     conn.query_drop(
@@ -217,9 +209,7 @@ pub fn add_pseudo_comment_data(
     Ok(state.to_string())
 }
 
-pub fn add_comment(conn_str: &str, state: &str, comment: &str) -> Result<PseudoComment, Error> {
-    let pool = Pool::new(conn_str)?;
-
+pub fn add_comment(pool: &Pool, state: &str, comment: &str) -> Result<PseudoComment, Error> {
     let mut conn = pool.get_conn()?;
 
     conn.query_drop(
@@ -253,9 +243,7 @@ pub fn add_comment(conn_str: &str, state: &str, comment: &str) -> Result<PseudoC
     Ok(pseudo_comment[0].clone())
 }
 
-pub fn check_edit_comment_auth(conn_str: &str, cid: &str, uid: &str) -> Result<bool, Error> {
-    let pool = Pool::new(conn_str)?;
-
+pub fn check_edit_comment_auth(pool: &Pool, cid: &str, uid: &str) -> Result<bool, Error> {
     let mut conn = pool.get_conn()?;
 
     let row_opt: Option<Row> = conn.exec_first(
@@ -266,9 +254,7 @@ pub fn check_edit_comment_auth(conn_str: &str, cid: &str, uid: &str) -> Result<b
     Ok(row_opt.is_some())
 }
 
-pub fn get_comment_text(conn_str: &str, cid: &str) -> Result<String, Error> {
-    let pool = Pool::new(conn_str)?;
-
+pub fn get_comment_text(pool: &Pool, cid: &str) -> Result<String, Error> {
     let mut conn = pool.get_conn()?;
 
     let mut row: Row = conn
@@ -280,9 +266,7 @@ pub fn get_comment_text(conn_str: &str, cid: &str) -> Result<String, Error> {
     ))
 }
 
-pub fn edit_comment(conn_str: &str, uuid: &str, comment: &str) -> Result<(), Error> {
-    let pool = Pool::new(conn_str)?;
-
+pub fn edit_comment(pool: &Pool, uuid: &str, comment: &str) -> Result<(), Error> {
     let mut conn = pool.get_conn()?;
 
     conn.exec_drop(
@@ -293,9 +277,7 @@ pub fn edit_comment(conn_str: &str, uuid: &str, comment: &str) -> Result<(), Err
     Ok(())
 }
 
-pub fn try_delete_comment(conn_str: &str, cid: &str, uid: u64) -> Result<(), Error> {
-    let pool = Pool::new(conn_str)?;
-
+pub fn try_delete_comment(pool: &Pool, cid: &str, uid: u64) -> Result<(), Error> {
     let mut conn = pool.get_conn()?;
 
     conn.exec_drop(
@@ -306,9 +288,7 @@ pub fn try_delete_comment(conn_str: &str, cid: &str, uid: u64) -> Result<(), Err
     Ok(())
 }
 
-pub fn try_delete_comment_id_only(conn_str: &str, cid: &str) -> Result<(), Error> {
-    let pool = Pool::new(conn_str)?;
-
+pub fn try_delete_comment_id_only(pool: &Pool, cid: &str) -> Result<(), Error> {
     let mut conn = pool.get_conn()?;
 
     conn.exec_drop("DELETE FROM COMMENT2 WHERE uuid = ?", (cid,))?;
@@ -316,9 +296,7 @@ pub fn try_delete_comment_id_only(conn_str: &str, cid: &str) -> Result<(), Error
     Ok(())
 }
 
-pub fn get_comments_per_blog_id(conn_str: &str, blog_id: &str) -> Result<Vec<Comment>, Error> {
-    let pool = Pool::new(conn_str)?;
-
+pub fn get_comments_per_blog_id(pool: &Pool, blog_id: &str) -> Result<Vec<Comment>, Error> {
     let mut conn = pool.get_conn()?;
 
     let utc_offset = UtcOffset::current_local_offset()?;
@@ -361,9 +339,7 @@ pub fn get_comments_per_blog_id(conn_str: &str, blog_id: &str) -> Result<Vec<Com
     Ok(comments)
 }
 
-pub fn get_blog_id_by_comment_id(conn_str: &str, cid: &str) -> Result<String, Error> {
-    let pool = Pool::new(conn_str)?;
-
+pub fn get_blog_id_by_comment_id(pool: &Pool, cid: &str) -> Result<String, Error> {
     let mut conn = pool.get_conn()?;
 
     let mut row: Row = conn

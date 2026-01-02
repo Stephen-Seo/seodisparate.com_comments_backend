@@ -201,13 +201,13 @@ async fn comment_text_get(
     res: &mut Response,
     depot: &mut Depot,
 ) -> Result<(), Error> {
-    let salvo_conf = depot.obtain::<Config>().unwrap();
+    let pool: &mysql::Pool = depot.obtain().unwrap();
 
     let comment_id: String = req
         .try_query("comment_id")
         .map_err(Error::err_to_client_err)?;
 
-    let comment_text: String = sql::get_comment_text(&salvo_conf.db_conn_string, &comment_id)?;
+    let comment_text: String = sql::get_comment_text(pool, &comment_id)?;
 
     res.body(comment_text);
 
@@ -225,6 +225,7 @@ async fn login_to_comment(
         .try_query("blog_url")
         .map_err(Error::err_to_client_err)?;
     let salvo_conf = depot.obtain::<Config>().unwrap();
+    let pool: &mysql::Pool = depot.obtain().unwrap();
     let is_allowed_url: bool = salvo_conf.allowed_urls.iter().fold(false, |acc, val| {
         if acc { acc } else { blog_url.starts_with(val) }
     });
@@ -254,7 +255,7 @@ async fn login_to_comment(
         ));
         return Ok(());
     }
-    let uuid = sql::create_rng_uuid(&salvo_conf.db_conn_string, None)?;
+    let uuid = sql::create_rng_uuid(pool, None)?;
     let redirect_url = Url::parse_with_params(
         &format!("{}/github_auth_make_comment", salvo_conf.base_url),
         &[
@@ -312,8 +313,9 @@ async fn github_auth_make_comment(
     let code: String = req.try_query("code").map_err(Error::err_to_client_err)?;
 
     let salvo_conf = depot.obtain::<Config>().unwrap();
+    let pool: &mysql::Pool = depot.obtain().unwrap();
 
-    let is_state_valid = sql::check_rng_uuid(&salvo_conf.db_conn_string, &state, None)?;
+    let is_state_valid = sql::check_rng_uuid(pool, &state, None)?;
     if !is_state_valid {
         eprintln!("State is invalid (timed out?)!\n");
         res.status_code(StatusCode::BAD_REQUEST);
@@ -432,7 +434,7 @@ async fn github_auth_make_comment(
         .ok_or(Error::from("Failed to parse user info profile avatar url!"))?;
 
     sql::add_pseudo_comment_data(
-        &salvo_conf.db_conn_string,
+        pool,
         &state,
         user_id,
         &user_name_str,
@@ -473,9 +475,9 @@ async fn submit_comment(req: &mut Request, depot: &mut Depot) -> Result<(), Erro
         .ok_or(Error::from("JSON parse error: \"comment_text\"").into_client_err())?;
 
     let salvo_conf = depot.obtain::<Config>().unwrap();
+    let pool: &mysql::Pool = depot.obtain().unwrap();
 
-    let pseudo_comment: sql::PseudoComment =
-        sql::add_comment(&salvo_conf.db_conn_string, req_state, req_comment)?;
+    let pseudo_comment: sql::PseudoComment = sql::add_comment(pool, req_state, req_comment)?;
 
     for cmd in &salvo_conf.on_comment_cmds {
         let cmd_res = std::process::Command::new("/usr/bin/sh")
@@ -498,14 +500,15 @@ async fn login_to_edit_comment(
     depot: &mut Depot,
 ) -> Result<(), Error> {
     let salvo_conf = depot.obtain::<Config>().unwrap();
+    let pool: &mysql::Pool = depot.obtain().unwrap();
     let comment_id: String = req
         .try_query("comment_id")
         .map_err(Error::err_to_client_err)?;
     let blog_url: String = req
         .try_query("blog_url")
         .map_err(Error::err_to_client_err)?;
-    let uuid = sql::create_rng_uuid(&salvo_conf.db_conn_string, Some(&comment_id))?;
-    let blog_id: String = sql::get_blog_id_by_comment_id(&salvo_conf.db_conn_string, &comment_id)?;
+    let uuid = sql::create_rng_uuid(pool, Some(&comment_id))?;
+    let blog_id: String = sql::get_blog_id_by_comment_id(pool, &comment_id)?;
     let redirect_url = Url::parse_with_params(
         &format!("{}/github_auth_edit_comment", salvo_conf.base_url),
         &[
@@ -566,9 +569,9 @@ async fn github_auth_edit_comment(
     let code: String = req.try_query("code").map_err(Error::err_to_client_err)?;
 
     let salvo_conf = depot.obtain::<Config>().unwrap();
+    let pool: &mysql::Pool = depot.obtain().unwrap();
 
-    let is_state_valid =
-        sql::check_rng_uuid(&salvo_conf.db_conn_string, &comment_id, Some(&state))?;
+    let is_state_valid = sql::check_rng_uuid(pool, &comment_id, Some(&state))?;
     if !is_state_valid {
         eprintln!("State is invalid (timed out?)!\n");
         res.status_code(StatusCode::BAD_REQUEST);
@@ -681,11 +684,7 @@ async fn github_auth_edit_comment(
         .as_str()
         .ok_or(Error::from("Failed to parse user info url!"))?;
 
-    let can_edit: bool = sql::check_edit_comment_auth(
-        &salvo_conf.db_conn_string,
-        &comment_id,
-        &user_id.to_string(),
-    )?;
+    let can_edit: bool = sql::check_edit_comment_auth(pool, &comment_id, &user_id.to_string())?;
     if !can_edit {
         eprintln!(
             "User tried to edit comment they didn't make! {}",
@@ -703,7 +702,7 @@ async fn github_auth_edit_comment(
     }
 
     sql::add_pseudo_comment_data(
-        &salvo_conf.db_conn_string,
+        pool,
         &state,
         user_id,
         &user_name_str,
@@ -729,7 +728,7 @@ async fn github_auth_edit_comment(
 
 #[handler]
 async fn submit_edit_comment(req: &mut Request, depot: &mut Depot) -> Result<(), Error> {
-    let salvo_conf = depot.obtain::<Config>().unwrap();
+    let pool: &mysql::Pool = depot.obtain().unwrap();
 
     let request_json: serde_json::Value =
         req.parse_json().await.map_err(Error::err_to_client_err)?;
@@ -745,7 +744,7 @@ async fn submit_edit_comment(req: &mut Request, depot: &mut Depot) -> Result<(),
         .as_str()
         .ok_or(Error::from("JSON parse error: \"comment_text\"").into_client_err())?;
 
-    sql::edit_comment(&salvo_conf.db_conn_string, req_comment_id, req_comment)?;
+    sql::edit_comment(pool, req_comment_id, req_comment)?;
 
     Ok(())
 }
@@ -757,6 +756,7 @@ async fn login_to_delete_comment(
     depot: &mut Depot,
 ) -> Result<(), Error> {
     let salvo_conf = depot.obtain::<Config>().unwrap();
+    let pool: &mysql::Pool = depot.obtain().unwrap();
 
     let comment_id: String = req
         .try_query("comment_id")
@@ -764,7 +764,7 @@ async fn login_to_delete_comment(
     let blog_url: String = req
         .try_query("blog_url")
         .map_err(Error::err_to_client_err)?;
-    let uuid = sql::create_rng_uuid(&salvo_conf.db_conn_string, Some(&comment_id))?;
+    let uuid = sql::create_rng_uuid(pool, Some(&comment_id))?;
     let redirect_url = Url::parse_with_params(
         &format!("{}/github_auth_del_comment", salvo_conf.base_url),
         &[("comment_id", comment_id), ("blog_url", blog_url)],
@@ -817,9 +817,9 @@ async fn github_auth_del_comment(
     let code: String = req.try_query("code").map_err(Error::err_to_client_err)?;
 
     let salvo_conf = depot.obtain::<Config>().unwrap();
+    let pool: &mysql::Pool = depot.obtain().unwrap();
 
-    let is_state_valid =
-        sql::check_rng_uuid(&salvo_conf.db_conn_string, &comment_id, Some(&state))?;
+    let is_state_valid = sql::check_rng_uuid(pool, &comment_id, Some(&state))?;
     if !is_state_valid {
         eprintln!("State is invalid (timed out?)!\n");
         res.status_code(StatusCode::BAD_REQUEST);
@@ -905,11 +905,7 @@ async fn github_auth_del_comment(
             |acc, elem| if acc { acc } else { elem == &user_login },
         );
 
-    let can_del: bool = sql::check_edit_comment_auth(
-        &salvo_conf.db_conn_string,
-        &comment_id,
-        &user_id.to_string(),
-    )?;
+    let can_del: bool = sql::check_edit_comment_auth(pool, &comment_id, &user_id.to_string())?;
     if !can_del && !is_admin {
         eprintln!(
             "User tried to delete comment they didn't make! {}",
@@ -927,9 +923,9 @@ async fn github_auth_del_comment(
     }
 
     if is_admin {
-        sql::try_delete_comment_id_only(&salvo_conf.db_conn_string, &comment_id)?;
+        sql::try_delete_comment_id_only(pool, &comment_id)?;
     } else {
-        sql::try_delete_comment(&salvo_conf.db_conn_string, &comment_id, user_id)?;
+        sql::try_delete_comment(pool, &comment_id, user_id)?;
     }
 
     let script = format!(
@@ -960,11 +956,11 @@ async fn get_comments_by_blog_id(
     res: &mut Response,
     depot: &mut Depot,
 ) -> Result<(), Error> {
-    let salvo_conf = depot.obtain::<Config>().unwrap();
+    let pool: &mysql::Pool = depot.obtain().unwrap();
 
     let blog_id: String = req.try_query("blog_id").map_err(Error::err_to_client_err)?;
 
-    let comments = sql::get_comments_per_blog_id(&salvo_conf.db_conn_string, &blog_id)?;
+    let comments = sql::get_comments_per_blog_id(pool, &blog_id)?;
 
     let json: String = serde_json::to_string(&comments)?;
 
@@ -991,10 +987,14 @@ async fn main() {
         admins: config.get_admins().to_vec(),
     };
 
-    sql::set_up_sql_db(&salvo_conf.db_conn_string, &salvo_conf.db_db).unwrap();
+    let pool: mysql::Pool = mysql::Pool::new(salvo_conf.db_conn_string.as_str())
+        .expect("Should be able to create mysql::Pool!");
+
+    sql::set_up_sql_db(&pool, &salvo_conf.db_db).unwrap();
 
     let router = Router::new()
         .hoop(affix_state::inject(salvo_conf))
+        .hoop(affix_state::inject(pool))
         .get(root_handler)
         .push(Router::with_path("get_comment").get(comment_text_get))
         .push(Router::with_path("get_comments").get(get_comments_by_blog_id))
