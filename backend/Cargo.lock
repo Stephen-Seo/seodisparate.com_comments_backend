@@ -2446,6 +2446,7 @@ checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
 name = "seodisparate_comments_backend"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "mysql",
  "reqwest",
  "salvo",

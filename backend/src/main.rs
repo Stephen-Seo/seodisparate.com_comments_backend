@@ -17,6 +17,7 @@
 mod arg_parse;
 mod config;
 mod error;
+mod signal;
 mod sql;
 
 use std::time::Duration;
@@ -971,6 +972,8 @@ async fn get_comments_by_blog_id(
 
 #[tokio::main]
 async fn main() {
+    signal::register_signal_handlers();
+
     let config =
         config::Config::try_from(arg_parse::Args::parse_args().unwrap().get_config_path()).unwrap();
 
@@ -1009,5 +1012,16 @@ async fn main() {
 
     let listener = TcpListener::new(format!("{}:{}", config.get_addr(), config.get_port()));
 
-    Server::new(listener.bind().await).serve(router).await;
+    let server = Server::new(listener.bind().await);
+    let handle = server.handle();
+    tokio::spawn(async move {
+        loop {
+            if signal::SIGNAL_HANDLED.load(std::sync::atomic::Ordering::Relaxed) {
+                handle.stop_graceful(Duration::from_secs(5));
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(333)).await;
+        }
+    });
+    server.serve(router).await;
 }
