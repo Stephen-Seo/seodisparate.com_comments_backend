@@ -108,7 +108,7 @@ impl TryFrom<SQLCtx> for Arc<Mutex<MSQLWrapper>> {
 pub fn set_up_sql_db(sql_ctx: SQLCtx, config: &Config) -> Result<(), Error> {
     let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx.try_into()?;
     let mut conn = conn
-        .lock()
+        .try_lock()
         .map_err(|_| -> Error { "Failed to get unique connection".into() })?;
 
     conn.query_drop(
@@ -159,7 +159,7 @@ pub fn set_up_sql_db(sql_ctx: SQLCtx, config: &Config) -> Result<(), Error> {
 pub fn has_psuedo_commment_with_state(sql_ctx: SQLCtx, state: &str) -> Result<bool, Error> {
     let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx.try_into()?;
     let mut conn = conn
-        .lock()
+        .try_lock()
         .map_err(|_| -> Error { "Failed to get unique connection".into() })?;
 
     let mut params = MSQLParamsWrapper::new();
@@ -177,7 +177,7 @@ pub fn create_rng_uuid(sql_ctx: SQLCtx, uuid: Option<&str>) -> Result<String, Er
         let sql_ctx_clone = sql_ctx.clone();
         let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx_clone.try_into()?;
         let mut conn = conn
-            .lock()
+            .try_lock()
             .map_err(|_| -> Error { "Failed to get unique connection".into() })?;
 
         conn.query_drop(
@@ -201,7 +201,7 @@ pub fn create_rng_uuid(sql_ctx: SQLCtx, uuid: Option<&str>) -> Result<String, Er
 
     let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx.try_into()?;
     let mut conn = conn
-        .lock()
+        .try_lock()
         .map_err(|_| -> Error { "Failed to get unique connection".into() })?;
 
     let rng_uuid_string = rng_uuid.to_string();
@@ -240,7 +240,7 @@ pub fn create_rng_uuid(sql_ctx: SQLCtx, uuid: Option<&str>) -> Result<String, Er
 pub fn check_rng_uuid(sql_ctx: SQLCtx, uuid: &str, state: Option<&str>) -> Result<bool, Error> {
     let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx.try_into()?;
     let mut conn = conn
-        .lock()
+        .try_lock()
         .map_err(|_| -> Error { "Failed to get unique connection".into() })?;
 
     conn.query_drop(
@@ -284,7 +284,7 @@ pub fn add_pseudo_comment_data(
 ) -> Result<String, Error> {
     let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx.try_into()?;
     let mut conn = conn
-        .lock()
+        .try_lock()
         .map_err(|_| -> Error { "Failed to get unique connection".into() })?;
 
     conn.query_drop(
@@ -343,7 +343,7 @@ pub fn add_pseudo_comment_data(
 pub fn add_comment(sql_ctx: SQLCtx, state: &str, comment: &str) -> Result<PseudoComment, Error> {
     let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx.try_into()?;
     let mut conn = conn
-        .lock()
+        .try_lock()
         .map_err(|_| -> Error { "Failed to get unique connection".into() })?;
 
     conn.query_drop(
@@ -452,7 +452,7 @@ pub fn add_comment(sql_ctx: SQLCtx, state: &str, comment: &str) -> Result<Pseudo
 pub fn check_edit_comment_auth(sql_ctx: SQLCtx, cid: &str, uid: &str) -> Result<bool, Error> {
     let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx.try_into()?;
     let mut conn = conn
-        .lock()
+        .try_lock()
         .map_err(|_| -> Error { "Failed to get unique connection".into() })?;
 
     let mut params = MSQLParamsWrapper::new();
@@ -470,7 +470,7 @@ pub fn check_edit_comment_auth(sql_ctx: SQLCtx, cid: &str, uid: &str) -> Result<
 pub fn get_comment_text(sql_ctx: SQLCtx, cid: &str) -> Result<String, Error> {
     let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx.try_into()?;
     let mut conn = conn
-        .lock()
+        .try_lock()
         .map_err(|_| -> Error { "Failed to get unique connection".into() })?;
 
     let mut params = MSQLParamsWrapper::new();
@@ -499,7 +499,7 @@ pub fn get_comment_text(sql_ctx: SQLCtx, cid: &str) -> Result<String, Error> {
 pub fn edit_comment(sql_ctx: SQLCtx, uuid: &str, comment: &str) -> Result<(), Error> {
     let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx.try_into()?;
     let mut conn = conn
-        .lock()
+        .try_lock()
         .map_err(|_| -> Error { "Failed to get unique connection".into() })?;
 
     let mut params = MSQLParamsWrapper::new();
@@ -517,7 +517,7 @@ pub fn edit_comment(sql_ctx: SQLCtx, uuid: &str, comment: &str) -> Result<(), Er
 pub fn try_delete_comment(sql_ctx: SQLCtx, cid: &str, uid: u64) -> Result<(), Error> {
     let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx.try_into()?;
     let mut conn = conn
-        .lock()
+        .try_lock()
         .map_err(|_| -> Error { "Failed to get unique connection".into() })?;
 
     let mut params = MSQLParamsWrapper::new();
@@ -535,7 +535,7 @@ pub fn try_delete_comment(sql_ctx: SQLCtx, cid: &str, uid: u64) -> Result<(), Er
 pub fn try_delete_comment_id_only(sql_ctx: SQLCtx, cid: &str) -> Result<(), Error> {
     let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx.try_into()?;
     let mut conn = conn
-        .lock()
+        .try_lock()
         .map_err(|_| -> Error { "Failed to get unique connection".into() })?;
 
     let mut params = MSQLParamsWrapper::new();
@@ -549,7 +549,7 @@ pub fn try_delete_comment_id_only(sql_ctx: SQLCtx, cid: &str) -> Result<(), Erro
 pub fn get_comments_per_blog_id(sql_ctx: SQLCtx, blog_id: &str) -> Result<Vec<Comment>, Error> {
     let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx.try_into()?;
     let mut conn = conn
-        .lock()
+        .try_lock()
         .map_err(|_| -> Error { "Failed to get unique connection".into() })?;
 
     let utc_offset = UtcOffset::current_local_offset()?;
@@ -666,7 +666,7 @@ pub fn get_comments_per_blog_id(sql_ctx: SQLCtx, blog_id: &str) -> Result<Vec<Co
 pub fn get_blog_id_by_comment_id(sql_ctx: SQLCtx, cid: &str) -> Result<String, Error> {
     let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx.try_into()?;
     let mut conn = conn
-        .lock()
+        .try_lock()
         .map_err(|_| -> Error { "Failed to get unique connection".into() })?;
 
     let mut params = MSQLParamsWrapper::new();
