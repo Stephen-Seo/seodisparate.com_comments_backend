@@ -27,6 +27,8 @@ use reqwest::Url;
 use salvo::prelude::*;
 use tokio::time::sleep;
 
+use crate::sql::SQLCtx;
+
 pub const COMMON_CSS: &str = r#"
     body {
         color: #FFF;
@@ -175,7 +177,7 @@ pub const EDIT_COMMENT_PAGE: &str = r#"
 "#;
 
 #[derive(Default, Clone, Debug)]
-struct Config {
+pub struct Config {
     db_user: String,
     db_pass: String,
     db_addr: String,
@@ -233,7 +235,7 @@ async fn comment_text_get(
         .try_query("comment_id")
         .map_err(Error::err_to_client_err)?;
 
-    let comment_text: String = sql::get_comment_text(config, &comment_id)?;
+    let comment_text: String = sql::get_comment_text(config.into(), &comment_id)?;
 
     res.body(comment_text);
 
@@ -281,7 +283,7 @@ async fn login_to_comment(
         ));
         return Ok(());
     }
-    let uuid = sql::create_rng_uuid(config, None)?;
+    let uuid = sql::create_rng_uuid(config.into(), None)?;
     let redirect_url = Url::parse_with_params(
         &format!("{}/github_auth_make_comment", salvo_conf.base_url),
         &[
@@ -340,7 +342,7 @@ async fn github_auth_make_comment(
 
     let config: &Config = depot.obtain().unwrap();
 
-    let is_state_valid = sql::check_rng_uuid(config, &state, None)?;
+    let is_state_valid = sql::check_rng_uuid(config.into(), &state, None)?;
     if !is_state_valid {
         eprintln!("State is invalid (timed out?)!\n");
         res.status_code(StatusCode::BAD_REQUEST);
@@ -459,7 +461,7 @@ async fn github_auth_make_comment(
         .ok_or(Error::from("Failed to parse user info profile avatar url!"))?;
 
     sql::add_pseudo_comment_data(
-        config,
+        config.into(),
         &state,
         user_id,
         &user_name_str,
@@ -501,7 +503,8 @@ async fn submit_comment(req: &mut Request, depot: &mut Depot) -> Result<(), Erro
 
     let config: &Config = depot.obtain().unwrap();
 
-    let pseudo_comment: sql::PseudoComment = sql::add_comment(config, req_state, req_comment)?;
+    let pseudo_comment: sql::PseudoComment =
+        sql::add_comment(config.into(), req_state, req_comment)?;
 
     for cmd in &config.on_comment_cmds {
         let cmd_res = std::process::Command::new("/usr/bin/sh")
@@ -530,8 +533,9 @@ async fn login_to_edit_comment(
     let blog_url: String = req
         .try_query("blog_url")
         .map_err(Error::err_to_client_err)?;
-    let uuid = sql::create_rng_uuid(config, Some(&comment_id))?;
-    let blog_id: String = sql::get_blog_id_by_comment_id(config, &comment_id)?;
+    let sql_ctx: SQLCtx = SQLCtx::new_as_connection(config)?;
+    let uuid = sql::create_rng_uuid(sql_ctx.clone(), Some(&comment_id))?;
+    let blog_id: String = sql::get_blog_id_by_comment_id(sql_ctx, &comment_id)?;
     let redirect_url = Url::parse_with_params(
         &format!("{}/github_auth_edit_comment", config.base_url),
         &[
@@ -593,7 +597,9 @@ async fn github_auth_edit_comment(
 
     let config: &Config = depot.obtain().unwrap();
 
-    let is_state_valid = sql::check_rng_uuid(config, &comment_id, Some(&state))?;
+    let sql_ctx: SQLCtx = SQLCtx::new_as_connection(config)?;
+
+    let is_state_valid = sql::check_rng_uuid(sql_ctx.clone(), &comment_id, Some(&state))?;
     if !is_state_valid {
         eprintln!("State is invalid (timed out?)!\n");
         res.status_code(StatusCode::BAD_REQUEST);
@@ -706,7 +712,8 @@ async fn github_auth_edit_comment(
         .as_str()
         .ok_or(Error::from("Failed to parse user info url!"))?;
 
-    let can_edit: bool = sql::check_edit_comment_auth(config, &comment_id, &user_id.to_string())?;
+    let can_edit: bool =
+        sql::check_edit_comment_auth(sql_ctx.clone(), &comment_id, &user_id.to_string())?;
     if !can_edit {
         eprintln!(
             "User tried to edit comment they didn't make! {}",
@@ -724,7 +731,7 @@ async fn github_auth_edit_comment(
     }
 
     sql::add_pseudo_comment_data(
-        config,
+        sql_ctx,
         &state,
         user_id,
         &user_name_str,
@@ -766,7 +773,7 @@ async fn submit_edit_comment(req: &mut Request, depot: &mut Depot) -> Result<(),
         .as_str()
         .ok_or(Error::from("JSON parse error: \"comment_text\"").into_client_err())?;
 
-    sql::edit_comment(config, req_comment_id, req_comment)?;
+    sql::edit_comment(config.into(), req_comment_id, req_comment)?;
 
     Ok(())
 }
@@ -785,7 +792,7 @@ async fn login_to_delete_comment(
     let blog_url: String = req
         .try_query("blog_url")
         .map_err(Error::err_to_client_err)?;
-    let uuid = sql::create_rng_uuid(config, Some(&comment_id))?;
+    let uuid = sql::create_rng_uuid(config.into(), Some(&comment_id))?;
     let redirect_url = Url::parse_with_params(
         &format!("{}/github_auth_del_comment", config.base_url),
         &[("comment_id", comment_id), ("blog_url", blog_url)],
@@ -838,8 +845,9 @@ async fn github_auth_del_comment(
     let code: String = req.try_query("code").map_err(Error::err_to_client_err)?;
 
     let config: &Config = depot.obtain().unwrap();
+    let sql_ctx: SQLCtx = SQLCtx::new_as_connection(config)?;
 
-    let is_state_valid = sql::check_rng_uuid(config, &comment_id, Some(&state))?;
+    let is_state_valid = sql::check_rng_uuid(sql_ctx.clone(), &comment_id, Some(&state))?;
     if !is_state_valid {
         eprintln!("State is invalid (timed out?)!\n");
         res.status_code(StatusCode::BAD_REQUEST);
@@ -925,7 +933,8 @@ async fn github_auth_del_comment(
             |acc, elem| if acc { acc } else { elem == &user_login },
         );
 
-    let can_del: bool = sql::check_edit_comment_auth(config, &comment_id, &user_id.to_string())?;
+    let can_del: bool =
+        sql::check_edit_comment_auth(sql_ctx.clone(), &comment_id, &user_id.to_string())?;
     if !can_del && !is_admin {
         eprintln!(
             "User tried to delete comment they didn't make! {}",
@@ -943,9 +952,9 @@ async fn github_auth_del_comment(
     }
 
     if is_admin {
-        sql::try_delete_comment_id_only(config, &comment_id)?;
+        sql::try_delete_comment_id_only(sql_ctx, &comment_id)?;
     } else {
-        sql::try_delete_comment(config, &comment_id, user_id)?;
+        sql::try_delete_comment(sql_ctx, &comment_id, user_id)?;
     }
 
     let script = format!(
@@ -980,7 +989,7 @@ async fn get_comments_by_blog_id(
 
     let blog_id: String = req.try_query("blog_id").map_err(Error::err_to_client_err)?;
 
-    let comments = sql::get_comments_per_blog_id(config, &blog_id)?;
+    let comments = sql::get_comments_per_blog_id(config.into(), &blog_id)?;
 
     let json: String = serde_json::to_string(&comments)?;
 
@@ -1014,7 +1023,7 @@ async fn main() {
         admins: config.get_admins().to_vec(),
     };
 
-    sql::set_up_sql_db(&salvo_conf).unwrap();
+    sql::set_up_sql_db((&salvo_conf).into(), &salvo_conf).unwrap();
 
     let router = Router::new()
         .hoop(affix_state::inject(salvo_conf))
