@@ -20,6 +20,8 @@ use std::{
     path::Path,
 };
 
+use crate::error::Error;
+
 #[derive(Debug, Clone)]
 pub struct Config {
     sql_user: String,
@@ -40,11 +42,22 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn get_connection_string(&self) -> String {
-        format!(
-            "mysql://{}:{}@{}:{}/{}",
-            self.sql_user, self.sql_pass, self.sql_addr, self.sql_port, self.sql_db
-        )
+    pub fn get_sql_user(&self) -> &str {
+        &self.sql_user
+    }
+
+    pub fn get_sql_pass(&self) -> &str {
+        &self.sql_pass
+    }
+
+    pub fn get_sql_addr(&self) -> &str {
+        &self.sql_addr
+    }
+
+    pub fn get_sql_port(&self) -> Result<u16, Error> {
+        self.sql_port
+            .parse()
+            .map_err(|_| Error::Generic(String::from("Failed to parse sql_port")))
     }
 
     pub fn get_sql_db(&self) -> &str {

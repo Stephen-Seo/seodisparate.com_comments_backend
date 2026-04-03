@@ -30,7 +30,6 @@ pub enum Error {
     Reqwest(reqwest::Error),
     ParseInt(ParseIntError),
     IO(std::io::Error),
-    Mysql(mysql::Error),
     Generic(String),
     ClientErr(Box<Error>),
 }
@@ -54,7 +53,6 @@ impl std::fmt::Display for Error {
             Error::Generic(s) => f.write_str(s),
             Error::IO(error) => error.fmt(f),
             Error::ParseInt(error) => error.fmt(f),
-            Error::Mysql(error) => error.fmt(f),
             Error::Reqwest(error) => error.fmt(f),
             Error::SalvoHttpParse(error) => error.fmt(f),
             Error::ClientErr(error) => error.fmt(f),
@@ -90,12 +88,6 @@ impl From<std::io::Error> for Error {
 impl From<ParseIntError> for Error {
     fn from(value: ParseIntError) -> Self {
         Error::ParseInt(value)
-    }
-}
-
-impl From<mysql::Error> for Error {
-    fn from(value: mysql::Error) -> Self {
-        Error::Mysql(value)
     }
 }
 

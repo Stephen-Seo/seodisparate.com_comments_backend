@@ -14,9 +14,8 @@
 // OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 // PERFORMANCE OF THIS SOFTWARE.
 
-use crate::error::Error;
-use mysql::prelude::*;
-use mysql::*;
+use crate::{Config, error::Error};
+use msql_ffi::{MSQLParamsWrapper, MSQLWrapper};
 use serde::Serialize;
 use time::{PrimitiveDateTime, UtcOffset, format_description};
 
@@ -31,17 +30,6 @@ pub struct Comment {
     pub comment: String,
 }
 
-#[derive(Debug)]
-struct PreProcessedComment {
-    comment_id: String,
-    username: String,
-    userurl: String,
-    useravatar: String,
-    create_date: Result<String, time::error::Format>,
-    edit_date: Result<String, time::error::Format>,
-    comment: String,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PseudoComment {
     pub user_id: u64,
@@ -52,8 +40,15 @@ pub struct PseudoComment {
     pub comment_id: String,
 }
 
-pub fn set_up_sql_db(pool: &Pool, db_name: &str) -> Result<(), Error> {
-    let mut conn = pool.get_conn()?;
+pub fn set_up_sql_db(config: &Config) -> Result<(), Error> {
+    let mut conn: MSQLWrapper = MSQLWrapper::try_new(
+        config.get_sql_addr(),
+        config.get_sql_port(),
+        config.get_sql_user(),
+        config.get_sql_pass(),
+        config.get_sql_db(),
+    )
+    .map_err(|_| -> Error { "Failed to connect to MSQL!".into() })?;
 
     conn.query_drop(
         r"CREATE TABLE IF NOT EXISTS COMMENT2 (
@@ -76,13 +71,12 @@ pub fn set_up_sql_db(pool: &Pool, db_name: &str) -> Result<(), Error> {
     )?;
 
     {
-        // Migrate from COMMENT to COMMENT2 if exists.
-        let row: Option<Row> = conn.exec_first(
-            "SELECT * FROM information_schema.tables WHERE table_schema = ? AND table_name = 'COMMENT'",
-            (db_name,),
-        )?;
+        let mut params: MSQLParamsWrapper = MSQLParamsWrapper::new();
+        params.append_str(config.get_sql_db())?;
+        let rows_res = conn.query_with_params_rows("SELECT * FROM information_schema.tables WHERE table_schema = ? AND table_name = 'COMMENT'", &params).map_err(|e| Error::Generic(e.to_owned()))?;
 
-        if row.is_some() {
+        if rows_res.is_some() {
+            // Migrate from COMMENT to COMMENT2 if exists.
             conn.query_drop(
                 r"INSERT INTO COMMENT2 (uuid, blog_post_id, user_id, username, userurl, useravatar, creation_date, edit_date, comment, timeout_date)
                     SELECT uuid, blog_post_id, user_id, username, userurl, useravatar, creation_date, edit_date, comment, NULL FROM COMMENT
@@ -101,17 +95,26 @@ pub fn set_up_sql_db(pool: &Pool, db_name: &str) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn has_psuedo_commment_with_state(conn: &mut PooledConn, state: &str) -> Result<bool, Error> {
-    Ok(conn
-        .exec_first::<String, &'static str, (&str,)>(
-            "SELECT uuid FROM COMMENT2 WHERE uuid = ?",
-            (state,),
-        )?
-        .is_some())
+pub fn has_psuedo_commment_with_state(conn: &mut MSQLWrapper, state: &str) -> Result<bool, Error> {
+    let mut params = MSQLParamsWrapper::new();
+    params.append_str(state)?;
+
+    let rows = conn
+        .query_with_params_rows("SELECT uuid FROM COMMENT2 WHERE uuid = ?", &params)
+        .map_err(|e| Error::Generic(e.to_owned()))?;
+
+    Ok(rows.is_some())
 }
 
-pub fn create_rng_uuid(pool: &Pool, uuid: Option<&str>) -> Result<String, Error> {
-    let mut conn = pool.get_conn()?;
+pub fn create_rng_uuid(config: &Config, uuid: Option<&str>) -> Result<String, Error> {
+    let mut conn: MSQLWrapper = MSQLWrapper::try_new(
+        config.get_sql_addr(),
+        config.get_sql_port(),
+        config.get_sql_user(),
+        config.get_sql_pass(),
+        config.get_sql_db(),
+    )
+    .map_err(|_| -> Error { "Failed to connect to MSQL!".into() })?;
 
     conn.query_drop(
         r"DELETE FROM COMMENT2 WHERE timeout_date IS NOT NULL AND TIMESTAMPDIFF(MINUTE, timeout_date, CURRENT_TIMESTAMP) > 60"
@@ -126,53 +129,77 @@ pub fn create_rng_uuid(pool: &Pool, uuid: Option<&str>) -> Result<String, Error>
     let rng_uuid_string = rng_uuid.to_string();
 
     if let Some(uuid_str) = uuid {
-        conn.exec_drop(
-            r"UPDATE COMMENT2 SET state = ? WHERE uuid = ? AND timeout_date IS NULL",
-            (&rng_uuid_string, uuid_str),
+        let mut params = MSQLParamsWrapper::new();
+        params.append_str(&rng_uuid_string)?;
+        params.append_str(uuid_str)?;
+
+        conn.query_with_params_drop(
+            "UPDATE COMMENT2 SET state = ? WHERE uuid = ? AND timeout_date IS NULL",
+            &params,
         )?;
-        conn.exec_first::<String, &'static str, (&str,)>(
-            r"SELECT state FROM COMMENT2 WHERE state IS NOT NULL AND uuid = ?",
-            (uuid_str,),
-        )?
-        .ok_or(Error::Generic(
-            "Failed to add state to existing comment!".into(),
-        ))?;
+
+        params = MSQLParamsWrapper::new();
+        params.append_str(uuid_str)?;
+
+        let rows = conn.query_with_params_rows(
+            "SELECT state FROM COMMENT2 WHERE state IS NOT NULL AND uuid = ?",
+            &params,
+        )?;
+
+        if rows.is_none() {
+            return Err("Failed to add state to existing comment!".into());
+        }
     } else {
-        conn.exec_drop(
-            r"INSERT INTO COMMENT2 (uuid) VALUES (?)",
-            (&rng_uuid_string,),
-        )?;
+        let mut params = MSQLParamsWrapper::new();
+        params.append_str(&rng_uuid_string)?;
+
+        conn.query_with_params_drop("INSERT INTO COMMENT2 (uuid) VALUES (?)", &params)?;
     }
 
     Ok(rng_uuid_string)
 }
 
-pub fn check_rng_uuid(pool: &Pool, uuid: &str, state: Option<&str>) -> Result<bool, Error> {
-    let mut conn = pool.get_conn()?;
+pub fn check_rng_uuid(config: &Config, uuid: &str, state: Option<&str>) -> Result<bool, Error> {
+    let mut conn: MSQLWrapper = MSQLWrapper::try_new(
+        config.get_sql_addr(),
+        config.get_sql_port(),
+        config.get_sql_user(),
+        config.get_sql_pass(),
+        config.get_sql_db(),
+    )
+    .map_err(|_| -> Error { "Failed to connect to MSQL!".into() })?;
 
     conn.query_drop(
         r"DELETE FROM COMMENT2 WHERE timeout_date IS NOT NULL AND TIMESTAMPDIFF(MINUTE, timeout_date, CURRENT_TIMESTAMP) > 60"
     )?;
 
     if let Some(state) = state {
-        let ret: Option<String> = conn.exec_first(
-            r"SELECT uuid FROM COMMENT2 WHERE uuid = ? AND state = ? AND timeout_date IS NULL",
-            (uuid, state),
+        let mut params = MSQLParamsWrapper::new();
+        params.append_str(uuid)?;
+        params.append_str(state)?;
+
+        let rows = conn.query_with_params_rows(
+            "SELECT uuid FROM COMMENT2 WHERE uuid = ? AND state = ? AND timeout_date IS NULL",
+            &params,
         )?;
 
-        Ok(ret.is_some())
+        Ok(rows.is_some())
     } else {
-        let ret: Option<String> = conn.exec_first(
-            r"SELECT uuid FROM COMMENT2 WHERE uuid = ? AND timeout_date IS NOT NULL",
-            (uuid,),
+        let mut params = MSQLParamsWrapper::new();
+        params.append_str(uuid)?;
+
+        let rows = conn.query_with_params_rows(
+            "SELECT uuid FROM COMMENT2 WHERE uuid = ? AND timeout_date IS NOT NULL",
+            &params,
         )?;
 
-        Ok(ret.is_some())
+        Ok(rows.is_some())
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn add_pseudo_comment_data(
-    pool: &Pool,
+    config: &Config,
     state: &str,
     user_id: u64,
     user_name: &str,
@@ -181,175 +208,460 @@ pub fn add_pseudo_comment_data(
     blog_post_id: Option<&str>,
     comment_id: Option<&str>,
 ) -> Result<String, Error> {
-    let mut conn = pool.get_conn()?;
+    let mut conn: MSQLWrapper = MSQLWrapper::try_new(
+        config.get_sql_addr(),
+        config.get_sql_port(),
+        config.get_sql_user(),
+        config.get_sql_pass(),
+        config.get_sql_db(),
+    )
+    .map_err(|_| -> Error { "Failed to connect to MSQL!".into() })?;
 
     conn.query_drop(
         r"DELETE FROM COMMENT2 WHERE timeout_date IS NOT NULL AND TIMESTAMPDIFF(MINUTE, timeout_date, CURRENT_TIMESTAMP) > 60"
     )?;
 
     if let Some(blog_id) = blog_post_id {
-        conn.exec_first::<String, &'static str, (&str,)>(
-            r"SELECT uuid FROM COMMENT2 WHERE uuid = ? AND timeout_date IS NOT NULL",
-            (state,),
-        )?
-        .ok_or(Error::Generic("Timed out creating comment!".into()))?;
-        conn.exec_drop(r"UPDATE COMMENT2 SET user_id=?, username=?, userurl=?, useravatar=?, blog_post_id=? WHERE uuid = ?", (user_id, user_name, user_url, user_avatar_url, blog_id, state))?;
-    } else if let Some(comment_id) = comment_id {
-        conn.exec_first::<String, &'static str, (&str, &str)>(
-            r"SELECT uuid FROM COMMENT2 WHERE uuid = ? AND state = ? AND timeout_date IS NULL",
-            (comment_id, state),
-        )?
-        .ok_or(Error::Generic("Timed out creating comment!".into()))?;
-        conn.exec_drop(
-            r"UPDATE COMMENT2 SET user_id=?, username=?, userurl=?, useravatar=?, state=NULL WHERE uuid = ?",
-            (user_id, user_name, user_url, user_avatar_url, comment_id),
+        let mut params = MSQLParamsWrapper::new();
+        params.append_str(state)?;
+
+        let rows = conn.query_with_params_rows(
+            "SELECT uuid FROM COMMENT2 WHERE uuid = ? AND timeout_date IS NOT NULL",
+            &params,
         )?;
+
+        if rows.is_none() {
+            return Err("Timed out creating comment!".into());
+        }
+
+        params = MSQLParamsWrapper::new();
+        params.append_uint64(user_id);
+        params.append_str(user_name)?;
+        params.append_str(user_url)?;
+        params.append_str(user_avatar_url)?;
+        params.append_str(blog_id)?;
+        params.append_str(state)?;
+
+        conn.query_with_params_drop("UPDATE COMMENT2 SET user_id=?, username=?, userurl=?, useravatar=?, blog_post_id=? WHERE uuid = ?", &params)?;
+    } else if let Some(comment_id) = comment_id {
+        let mut params = MSQLParamsWrapper::new();
+        params.append_str(comment_id)?;
+        params.append_str(state)?;
+
+        let rows = conn.query_with_params_rows(
+            "SELECT uuid FROM COMMENT2 WHERE uuid = ? AND state = ? AND timeout_date IS NULL",
+            &params,
+        )?;
+
+        if rows.is_none() {
+            return Err("Timed out creating comment!".into());
+        }
+
+        params = MSQLParamsWrapper::new();
+        params.append_uint64(user_id);
+        params.append_str(user_name)?;
+        params.append_str(user_url)?;
+        params.append_str(user_avatar_url)?;
+        params.append_str(comment_id)?;
+
+        conn.query_with_params_drop("UPDATE COMMENT2 SET user_id=?, username=?, userurl=?, useravatar=?, state=NULL WHERE uuid = ?", &params)?;
     }
 
     Ok(state.to_string())
 }
 
-pub fn add_comment(pool: &Pool, state: &str, comment: &str) -> Result<PseudoComment, Error> {
-    let mut conn = pool.get_conn()?;
+pub fn add_comment(config: &Config, state: &str, comment: &str) -> Result<PseudoComment, Error> {
+    let mut conn: MSQLWrapper = MSQLWrapper::try_new(
+        config.get_sql_addr(),
+        config.get_sql_port(),
+        config.get_sql_user(),
+        config.get_sql_pass(),
+        config.get_sql_db(),
+    )
+    .map_err(|_| -> Error { "Failed to connect to MSQL!".into() })?;
 
     conn.query_drop(
         r"DELETE FROM COMMENT2 WHERE timeout_date IS NOT NULL AND TIMESTAMPDIFF(MINUTE, timeout_date, CURRENT_TIMESTAMP) > 60"
     )?;
 
-    conn.exec_first::<String, &'static str, (&str,)>(
-        r"SELECT uuid FROM COMMENT2 WHERE uuid = ?",
-        (state,),
-    )?
-    .ok_or(Error::Generic("Timed out creating comment!".into()))?;
+    let mut params = MSQLParamsWrapper::new();
+    params.append_str(state)?;
 
-    conn.exec_drop(
+    let rows = conn.query_with_params_rows("SELECT uuid FROM COMMENT2 WHERE uuid = ?", &params)?;
+
+    if rows.is_none() {
+        return Err("Timed out creating comment!".into());
+    }
+
+    params = MSQLParamsWrapper::new();
+    params.append_str(comment)?;
+    params.append_str(state)?;
+
+    conn.query_with_params_drop(
         "UPDATE COMMENT2 SET timeout_date=NULL, comment=? WHERE uuid = ?",
-        (comment, state),
+        &params,
     )?;
 
-    let pseudo_comment = conn.exec_map(
+    params = MSQLParamsWrapper::new();
+    params.append_str(state)?;
+
+    let rows = conn.query_with_params_rows(
         "SELECT user_id, username, userurl, useravatar, blog_post_id FROM COMMENT2 WHERE uuid = ?",
-        (state,),
-        |(user_id, username, userurl, useravatar, blog_post_id)| PseudoComment {
-            user_id,
-            username,
-            userurl,
-            useravatar,
-            blog_post_id,
-            comment_id: String::new(),
-        },
+        &params,
     )?;
 
-    Ok(pseudo_comment[0].clone())
+    let user_id: Option<u64>;
+    let username: Option<String>;
+    let userurl: Option<String>;
+    let useravatar: Option<String>;
+    let blog_post_id: Option<String>;
+
+    if let Some(rows) = rows {
+        if rows.len() == 1 && rows[0].len() == 5 {
+            user_id = match &rows[0][0] {
+                msql_ffi::MSQLValueEnum::Error => None,
+                msql_ffi::MSQLValueEnum::Null => None,
+                msql_ffi::MSQLValueEnum::Int64(i) => Some(*i as u64),
+                msql_ffi::MSQLValueEnum::UInt64(u) => Some(*u),
+                msql_ffi::MSQLValueEnum::String(_) => None,
+                msql_ffi::MSQLValueEnum::DoubleF64(_) => None,
+            };
+
+            username = match &rows[0][1] {
+                msql_ffi::MSQLValueEnum::Error => None,
+                msql_ffi::MSQLValueEnum::Null => None,
+                msql_ffi::MSQLValueEnum::Int64(_) => None,
+                msql_ffi::MSQLValueEnum::UInt64(_) => None,
+                msql_ffi::MSQLValueEnum::String(s) => Some(s.to_owned()),
+                msql_ffi::MSQLValueEnum::DoubleF64(_) => None,
+            };
+
+            userurl = match &rows[0][2] {
+                msql_ffi::MSQLValueEnum::Error => None,
+                msql_ffi::MSQLValueEnum::Null => None,
+                msql_ffi::MSQLValueEnum::Int64(_) => None,
+                msql_ffi::MSQLValueEnum::UInt64(_) => None,
+                msql_ffi::MSQLValueEnum::String(s) => Some(s.to_owned()),
+                msql_ffi::MSQLValueEnum::DoubleF64(_) => None,
+            };
+
+            useravatar = match &rows[0][3] {
+                msql_ffi::MSQLValueEnum::Error => None,
+                msql_ffi::MSQLValueEnum::Null => None,
+                msql_ffi::MSQLValueEnum::Int64(_) => None,
+                msql_ffi::MSQLValueEnum::UInt64(_) => None,
+                msql_ffi::MSQLValueEnum::String(s) => Some(s.to_owned()),
+                msql_ffi::MSQLValueEnum::DoubleF64(_) => None,
+            };
+
+            blog_post_id = match &rows[0][4] {
+                msql_ffi::MSQLValueEnum::Error => None,
+                msql_ffi::MSQLValueEnum::Null => None,
+                msql_ffi::MSQLValueEnum::Int64(_) => None,
+                msql_ffi::MSQLValueEnum::UInt64(_) => None,
+                msql_ffi::MSQLValueEnum::String(s) => Some(s.to_owned()),
+                msql_ffi::MSQLValueEnum::DoubleF64(_) => None,
+            };
+        } else {
+            return Err("Add comment: Failed to query pseudo comment (invalid length)".into());
+        }
+    } else {
+        return Err("Add comment: Failed to query pseudo comment (does not exist)".into());
+    }
+
+    Ok(PseudoComment {
+        user_id: user_id.ok_or(Into::<Error>::into("Add comment: Failed to parse user_id"))?,
+        username: username.ok_or(Into::<Error>::into("Add comment: Failed to parse username"))?,
+        userurl: userurl.ok_or(Into::<Error>::into("Add comment: Failed to parse userurl"))?,
+        useravatar: useravatar.ok_or(Into::<Error>::into(
+            "Add comment: Failed to parse useravatar",
+        ))?,
+        blog_post_id: blog_post_id.ok_or(Into::<Error>::into(
+            "Add comment: Failed to parse blog_post_id",
+        ))?,
+        comment_id: String::new(),
+    })
 }
 
-pub fn check_edit_comment_auth(pool: &Pool, cid: &str, uid: &str) -> Result<bool, Error> {
-    let mut conn = pool.get_conn()?;
+pub fn check_edit_comment_auth(config: &Config, cid: &str, uid: &str) -> Result<bool, Error> {
+    let mut conn: MSQLWrapper = MSQLWrapper::try_new(
+        config.get_sql_addr(),
+        config.get_sql_port(),
+        config.get_sql_user(),
+        config.get_sql_pass(),
+        config.get_sql_db(),
+    )
+    .map_err(|_| -> Error { "Failed to connect to MSQL!".into() })?;
 
-    let row_opt: Option<Row> = conn.exec_first(
+    let mut params = MSQLParamsWrapper::new();
+    params.append_str(cid)?;
+    params.append_str(uid)?;
+
+    let rows = conn.query_with_params_rows(
         "SELECT uuid FROM COMMENT2 WHERE uuid = ? AND user_id = ?",
-        (cid, uid),
+        &params,
     )?;
 
-    Ok(row_opt.is_some())
+    Ok(rows.is_some())
 }
 
-pub fn get_comment_text(pool: &Pool, cid: &str) -> Result<String, Error> {
-    let mut conn = pool.get_conn()?;
+pub fn get_comment_text(config: &Config, cid: &str) -> Result<String, Error> {
+    let mut conn: MSQLWrapper = MSQLWrapper::try_new(
+        config.get_sql_addr(),
+        config.get_sql_port(),
+        config.get_sql_user(),
+        config.get_sql_pass(),
+        config.get_sql_db(),
+    )
+    .map_err(|_| -> Error { "Failed to connect to MSQL!".into() })?;
 
-    let mut row: Row = conn
-        .exec_first("SELECT comment from COMMENT2 WHERE uuid = ?", (cid,))?
-        .ok_or(Error::from("Editing comment: Comment not found!"))?;
+    let mut params = MSQLParamsWrapper::new();
+    params.append_str(cid)?;
 
-    row.take::<String, usize>(0).ok_or(Error::from(
-        "Editing comment: Comment failed to convert to String!",
-    ))
+    let rows =
+        conn.query_with_params_rows("SELECT comment from COMMENT2 WHERE uuid = ?", &params)?;
+
+    if let Some(rows) = rows
+        && rows.len() == 1
+        && rows[0].len() == 1
+    {
+        match &rows[0][0] {
+            msql_ffi::MSQLValueEnum::Error => Err("Internal error fetching comment".into()),
+            msql_ffi::MSQLValueEnum::Null => Err("Internal error fetching comment".into()),
+            msql_ffi::MSQLValueEnum::Int64(_) => Err("Internal error fetching comment".into()),
+            msql_ffi::MSQLValueEnum::UInt64(_) => Err("Internal error fetching comment".into()),
+            msql_ffi::MSQLValueEnum::String(s) => Ok(s.to_owned()),
+            msql_ffi::MSQLValueEnum::DoubleF64(_) => Err("Internal error fetching comment".into()),
+        }
+    } else {
+        Err("Internal error querying comment".into())
+    }
 }
 
-pub fn edit_comment(pool: &Pool, uuid: &str, comment: &str) -> Result<(), Error> {
-    let mut conn = pool.get_conn()?;
+pub fn edit_comment(config: &Config, uuid: &str, comment: &str) -> Result<(), Error> {
+    let mut conn: MSQLWrapper = MSQLWrapper::try_new(
+        config.get_sql_addr(),
+        config.get_sql_port(),
+        config.get_sql_user(),
+        config.get_sql_pass(),
+        config.get_sql_db(),
+    )
+    .map_err(|_| -> Error { "Failed to connect to MSQL!".into() })?;
 
-    conn.exec_drop(
+    let mut params = MSQLParamsWrapper::new();
+    params.append_str(comment)?;
+    params.append_str(uuid)?;
+
+    conn.query_with_params_drop(
         "UPDATE COMMENT2 SET edit_date = CURRENT_TIMESTAMP, comment = ? WHERE uuid = ?",
-        (comment, uuid),
+        &params,
     )?;
 
     Ok(())
 }
 
-pub fn try_delete_comment(pool: &Pool, cid: &str, uid: u64) -> Result<(), Error> {
-    let mut conn = pool.get_conn()?;
+pub fn try_delete_comment(config: &Config, cid: &str, uid: u64) -> Result<(), Error> {
+    let mut conn: MSQLWrapper = MSQLWrapper::try_new(
+        config.get_sql_addr(),
+        config.get_sql_port(),
+        config.get_sql_user(),
+        config.get_sql_pass(),
+        config.get_sql_db(),
+    )
+    .map_err(|_| -> Error { "Failed to connect to MSQL!".into() })?;
 
-    conn.exec_drop(
+    let mut params = MSQLParamsWrapper::new();
+    params.append_str(cid)?;
+    params.append_uint64(uid);
+
+    conn.query_with_params_drop(
         "DELETE FROM COMMENT2 WHERE uuid = ? AND user_id = ?",
-        (cid, uid),
+        &params,
     )?;
 
     Ok(())
 }
 
-pub fn try_delete_comment_id_only(pool: &Pool, cid: &str) -> Result<(), Error> {
-    let mut conn = pool.get_conn()?;
+pub fn try_delete_comment_id_only(config: &Config, cid: &str) -> Result<(), Error> {
+    let mut conn: MSQLWrapper = MSQLWrapper::try_new(
+        config.get_sql_addr(),
+        config.get_sql_port(),
+        config.get_sql_user(),
+        config.get_sql_pass(),
+        config.get_sql_db(),
+    )
+    .map_err(|_| -> Error { "Failed to connect to MSQL!".into() })?;
 
-    conn.exec_drop("DELETE FROM COMMENT2 WHERE uuid = ?", (cid,))?;
+    let mut params = MSQLParamsWrapper::new();
+    params.append_str(cid)?;
+
+    conn.query_with_params_drop("DELETE FROM COMMENT2 WHERE uuid = ?", &params)?;
 
     Ok(())
 }
 
-pub fn get_comments_per_blog_id(pool: &Pool, blog_id: &str) -> Result<Vec<Comment>, Error> {
-    let mut conn = pool.get_conn()?;
+pub fn get_comments_per_blog_id(config: &Config, blog_id: &str) -> Result<Vec<Comment>, Error> {
+    let mut conn: MSQLWrapper = MSQLWrapper::try_new(
+        config.get_sql_addr(),
+        config.get_sql_port(),
+        config.get_sql_user(),
+        config.get_sql_pass(),
+        config.get_sql_db(),
+    )
+    .map_err(|_| -> Error { "Failed to connect to MSQL!".into() })?;
 
     let utc_offset = UtcOffset::current_local_offset()?;
 
-    let format = format_description::parse(
+    let parsing_format =
+        format_description::parse("[year]-[month]-[day]T[hour]:[minute]:[second]")?;
+
+    let output_format = format_description::parse(
         "[year]-[month]-[day]T[hour]:[minute]:[second][offset_hour sign:mandatory]:[offset_minute]",
     )?;
 
-    let pre_proc_comments = conn.exec_map(
-        "SELECT uuid, username, userurl, useravatar, creation_date, edit_date, comment FROM COMMENT2 WHERE blog_post_id = ? ORDER BY creation_date",
-        (blog_id,), |(uuid, username, userurl, useravatar, creation_date, edit_date, comment)| {
-            let create_time: PrimitiveDateTime = creation_date;
-            let edit_time: PrimitiveDateTime = edit_date;
-            PreProcessedComment {
-                comment_id: uuid,
-                username,
-                userurl,
-                useravatar,
-                create_date: create_time.assume_offset(utc_offset).format(&format),
-                edit_date: edit_time.assume_offset(utc_offset).format(&format),
-                comment,
+    let mut params = MSQLParamsWrapper::new();
+    params.append_str(blog_id)?;
+
+    let rows = conn.query_with_params_rows("SELECT uuid, username, userurl, useravatar, creation_date, edit_date, comment FROM COMMENT2 WHERE blog_post_id = ? ORDER BY creation_date", &params)?;
+
+    if rows.is_none() {
+        // No comments.
+        return Ok(Vec::new());
+    }
+
+    let mut comments: Vec<Comment> = Vec::new();
+
+    for row in rows.as_ref().unwrap() {
+        let comment_id: String = match &row[0] {
+            msql_ffi::MSQLValueEnum::Error => continue,
+            msql_ffi::MSQLValueEnum::Null => continue,
+            msql_ffi::MSQLValueEnum::Int64(_) => continue,
+            msql_ffi::MSQLValueEnum::UInt64(_) => continue,
+            msql_ffi::MSQLValueEnum::String(s) => s.to_owned(),
+            msql_ffi::MSQLValueEnum::DoubleF64(_) => continue,
+        };
+        let username: String = match &row[1] {
+            msql_ffi::MSQLValueEnum::Error => continue,
+            msql_ffi::MSQLValueEnum::Null => continue,
+            msql_ffi::MSQLValueEnum::Int64(_) => continue,
+            msql_ffi::MSQLValueEnum::UInt64(_) => continue,
+            msql_ffi::MSQLValueEnum::String(s) => s.to_owned(),
+            msql_ffi::MSQLValueEnum::DoubleF64(_) => continue,
+        };
+        let userurl: String = match &row[2] {
+            msql_ffi::MSQLValueEnum::Error => continue,
+            msql_ffi::MSQLValueEnum::Null => continue,
+            msql_ffi::MSQLValueEnum::Int64(_) => continue,
+            msql_ffi::MSQLValueEnum::UInt64(_) => continue,
+            msql_ffi::MSQLValueEnum::String(s) => s.to_owned(),
+            msql_ffi::MSQLValueEnum::DoubleF64(_) => continue,
+        };
+        let useravatar: String = match &row[3] {
+            msql_ffi::MSQLValueEnum::Error => continue,
+            msql_ffi::MSQLValueEnum::Null => continue,
+            msql_ffi::MSQLValueEnum::Int64(_) => continue,
+            msql_ffi::MSQLValueEnum::UInt64(_) => continue,
+            msql_ffi::MSQLValueEnum::String(s) => s.to_owned(),
+            msql_ffi::MSQLValueEnum::DoubleF64(_) => continue,
+        };
+        let create_date: PrimitiveDateTime = match &row[4] {
+            msql_ffi::MSQLValueEnum::Error => continue,
+            msql_ffi::MSQLValueEnum::Null => continue,
+            msql_ffi::MSQLValueEnum::Int64(_) => continue,
+            msql_ffi::MSQLValueEnum::UInt64(_) => continue,
+            msql_ffi::MSQLValueEnum::String(s) => {
+                let res = PrimitiveDateTime::parse(s, &parsing_format);
+
+                if let Ok(ret_time) = res {
+                    ret_time
+                } else {
+                    continue;
+                }
             }
-        }
-    )?;
+            msql_ffi::MSQLValueEnum::DoubleF64(_) => continue,
+        };
+        let edit_date: PrimitiveDateTime = match &row[5] {
+            msql_ffi::MSQLValueEnum::Error => continue,
+            msql_ffi::MSQLValueEnum::Null => continue,
+            msql_ffi::MSQLValueEnum::Int64(_) => continue,
+            msql_ffi::MSQLValueEnum::UInt64(_) => continue,
+            msql_ffi::MSQLValueEnum::String(s) => {
+                let res = PrimitiveDateTime::parse(s, &parsing_format);
 
-    let mut comments = Vec::new();
+                if let Ok(ret_time) = res {
+                    ret_time
+                } else {
+                    continue;
+                }
+            }
+            msql_ffi::MSQLValueEnum::DoubleF64(_) => continue,
+        };
+        let comment: String = match &row[6] {
+            msql_ffi::MSQLValueEnum::Error => continue,
+            msql_ffi::MSQLValueEnum::Null => continue,
+            msql_ffi::MSQLValueEnum::Int64(_) => continue,
+            msql_ffi::MSQLValueEnum::UInt64(_) => continue,
+            msql_ffi::MSQLValueEnum::String(s) => s.to_owned(),
+            msql_ffi::MSQLValueEnum::DoubleF64(_) => continue,
+        };
 
-    for pre in pre_proc_comments {
         comments.push(Comment {
-            comment_id: pre.comment_id,
-            username: pre.username,
-            userurl: pre.userurl,
-            useravatar: pre.useravatar,
-            create_date: pre.create_date?,
-            edit_date: pre.edit_date?,
-            comment: pre.comment,
+            comment_id,
+            username,
+            userurl,
+            useravatar,
+            create_date: create_date
+                .assume_offset(utc_offset)
+                .format(&output_format)?,
+            edit_date: edit_date.assume_offset(utc_offset).format(&output_format)?,
+            comment,
         });
     }
 
     Ok(comments)
 }
 
-pub fn get_blog_id_by_comment_id(pool: &Pool, cid: &str) -> Result<String, Error> {
-    let mut conn = pool.get_conn()?;
+pub fn get_blog_id_by_comment_id(config: &Config, cid: &str) -> Result<String, Error> {
+    let mut conn: MSQLWrapper = MSQLWrapper::try_new(
+        config.get_sql_addr(),
+        config.get_sql_port(),
+        config.get_sql_user(),
+        config.get_sql_pass(),
+        config.get_sql_db(),
+    )
+    .map_err(|_| -> Error { "Failed to connect to MSQL!".into() })?;
 
-    let mut row: Row = conn
-        .exec_first(
-            r"SELECT blog_post_id FROM COMMENT2 WHERE uuid = ? AND timeout_date IS NULL",
-            (cid,),
-        )?
-        .ok_or(Error::Generic("Comment not found!".into()))?;
+    let mut params = MSQLParamsWrapper::new();
+    params.append_str(cid)?;
 
-    Ok(row
-        .take(0)
-        .ok_or(Error::Generic("Internal Error, Comment not found!".into()))?)
+    let rows = conn.query_with_params_rows(
+        "SELECT blog_post_id FROM COMMENT2 WHERE uuid = ? AND timeout_date IS NULL",
+        &params,
+    )?;
+
+    if let Some(rows) = rows
+        && rows.len() == 1
+        && rows[0].len() == 1
+    {
+        match &rows[0][0] {
+            msql_ffi::MSQLValueEnum::Error => {
+                Err("Internal Error blog id not valid in query".into())
+            }
+            msql_ffi::MSQLValueEnum::Null => {
+                Err("Internal Error blog id not valid in query".into())
+            }
+            msql_ffi::MSQLValueEnum::Int64(_) => {
+                Err("Internal Error blog id not valid in query".into())
+            }
+            msql_ffi::MSQLValueEnum::UInt64(_) => {
+                Err("Internal Error blog id not valid in query".into())
+            }
+            msql_ffi::MSQLValueEnum::String(s) => Ok(s.to_owned()),
+            msql_ffi::MSQLValueEnum::DoubleF64(_) => {
+                Err("Internal Error blog id not valid in query".into())
+            }
+        }
+    } else {
+        Err("Internal Error failed to query blog id by comment id".into())
+    }
 }
