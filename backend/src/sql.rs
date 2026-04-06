@@ -173,6 +173,9 @@ pub fn has_psuedo_commment_with_state(sql_ctx: SQLCtx, state: &str) -> Result<bo
 }
 
 pub fn create_rng_uuid(sql_ctx: SQLCtx, uuid: Option<&str>) -> Result<String, Error> {
+    // Ensure the sql_ctx has a connection.
+    let sql_ctx: SQLCtx = TryInto::<Arc<Mutex<MSQLWrapper>>>::try_into(sql_ctx)?.into();
+
     {
         let sql_ctx_clone = sql_ctx.clone();
         let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx_clone.try_into()?;
