@@ -131,6 +131,19 @@ pub fn set_up_sql_db(sql_ctx: SQLCtx, config: &Config) -> Result<(), Error> {
         )",
     )?;
 
+    conn.query_drop(
+        r"CREATE TABLE IF NOT EXISTS LOGIN (
+            id CHAR(36) PRIMARY KEY,
+            ip TINYTEXT,
+            INDEX ip_index USING HASH (ip),
+            user_id BIGINT NOT NULL,
+            username TINYTEXT NOT NULL,
+            userurl TINYTEXT NOT NULL,
+            useravatar TINYTEXT NOT NULL,
+            login_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )",
+    )?;
+
     {
         let mut params: MSQLParamsWrapper = MSQLParamsWrapper::new();
         params.append_str(config.get_sql_db())?;
@@ -704,5 +717,86 @@ pub fn get_blog_id_by_comment_id(sql_ctx: SQLCtx, cid: &str) -> Result<String, E
         }
     } else {
         Err("Internal Error failed to query blog id by comment id".into())
+    }
+}
+
+pub fn cleanup_logins(sql_ctx: SQLCtx, minutes_timeout: u64) -> Result<(), Error> {
+    let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx.try_into()?;
+    let mut conn = conn
+        .try_lock()
+        .map_err(|_| -> Error { "Failed to get unique connection".into() })?;
+
+    let mut params = MSQLParamsWrapper::new();
+    params.append_uint64(minutes_timeout);
+
+    conn.query_with_params_drop(
+        "DELETE FROM LOGIN WHERE TIMESTAMPDIFF(MINUTE, login_date, CURRENT_TIMESTAMP) > ?",
+        &params,
+    )?;
+
+    Ok(())
+}
+
+pub fn add_login(
+    sql_ctx: SQLCtx,
+    ip: Option<&str>,
+    user_id: &str,
+    username: &str,
+    userurl: &str,
+    useravatar: &str,
+) -> Result<String, Error> {
+    let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx.try_into()?;
+    let mut conn = conn
+        .try_lock()
+        .map_err(|_| -> Error { "Failed to get unique connection".into() })?;
+
+    let mut id: String = uuid::Uuid::new_v4().to_string();
+
+    loop {
+        let mut params = MSQLParamsWrapper::new();
+        params.append_str(&id)?;
+        let ret = conn.query_with_params_rows("SELECT id FROM LOGIN WHERE id = ?", &params)?;
+        if ret.is_none() {
+            break;
+        } else {
+            id = uuid::Uuid::new_v4().to_string();
+        }
+    }
+
+    let mut params = MSQLParamsWrapper::new();
+    params.append_str(&id)?;
+    if let Some(ip) = ip {
+        params.append_str(ip)?;
+    } else {
+        params.append_null();
+    }
+    params.append_str(user_id)?;
+    params.append_str(username)?;
+    params.append_str(userurl)?;
+    params.append_str(useravatar)?;
+
+    conn.query_with_params_drop("INSERT INTO LOGIN (id, ip, user_id, username, userurl, useravatar) VALUES (?, ?, ?, ? ,? ,?)", &params)?;
+
+    Ok(id)
+}
+
+pub fn check_logged_in(sql_ctx: SQLCtx, id: &str, ip: Option<&str>) -> Result<bool, Error> {
+    let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx.try_into()?;
+    let mut conn = conn
+        .try_lock()
+        .map_err(|_| -> Error { "Failed to get unique connection".into() })?;
+
+    if let Some(ip) = ip {
+        let mut params = MSQLParamsWrapper::new();
+        params.append_str(id)?;
+        params.append_str(ip)?;
+        let ret =
+            conn.query_with_params_rows("SELECT id FROM LOGIN WHERE id = ? AND ip = ?", &params)?;
+        Ok(ret.is_some())
+    } else {
+        let mut params = MSQLParamsWrapper::new();
+        params.append_str(id)?;
+        let ret = conn.query_with_params_rows("SELECT id FROM LOGIN WHERE id = ?", &params)?;
+        Ok(ret.is_some())
     }
 }
