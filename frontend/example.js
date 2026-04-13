@@ -18,7 +18,21 @@ async function load_blog_comments(blog_id, blog_url, base_url) {
     let json_arr = JSON.parse(await response.text());
     if (json_arr.length == 0) {
       comment_div.innerText = "There are no comments.";
+      let logout_button = document.createElement("button");
+      logout_button.onclick = (e) => {
+        let login_id = window.localStorage.getItem("seodisp_comments_login_id");
+        if (login_id !== null) {
+          window.location = base_url + "/logout?blog_url=" + blog_url_encoded + "&login_id=" + login_id;
+        } else {
+          window.location = base_url + "/logout?blog_url=" + blog_url_encoded;
+        }
+      };
+      logout_button.innerText = "Logout from Comment System (Logins expire over time)";
+      comment_div.appendChild(document.createElement("br"));
+      comment_div.appendChild(document.createElement("br"));
+      comment_div.appendChild(logout_button);
     } else {
+      comment_div.appendChild(document.createElement("br"));
       let logout_button = document.createElement("button");
       logout_button.onclick = (e) => {
         let login_id = window.localStorage.getItem("seodisp_comments_login_id");
