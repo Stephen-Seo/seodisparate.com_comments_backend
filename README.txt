@@ -46,6 +46,16 @@ isn't one of these, then it will be rejected.
 "admin" can also be specified multiple times, and should be set to the
 "github login" of users to be admins. Admins can delete anyone's comment.
 
+"x_real_ip_enabled" can be set to "true" in the config. This will cause the
+comment system to expect api usage with "x-real-ip" header set to the client's
+ip address (useful such as nginx acting as a reverse proxy for the comments
+system). This increases security of the "temporary comments login" such that
+only those with a matching id originating with the same ip address can continue
+to use the comment system without authenticating to Github for each request.
+
+"login_timeout" is set to a positive integer in the config and is the number of
+minutes for a "temporary login" to persist. It defaults to 60 minutes.
+
 
 ================================================================================
 
