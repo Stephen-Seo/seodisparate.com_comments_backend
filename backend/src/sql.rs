@@ -42,6 +42,17 @@ pub struct PseudoComment {
     pub comment_id: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoginInfo {
+    pub user_id: String,
+    pub user_ip: Option<String>,
+    pub user_github_id: u64,
+    pub username: String,
+    pub userlogin: String,
+    pub userurl: String,
+    pub useravatar: String,
+}
+
 #[derive(Clone)]
 pub enum SQLCtx {
     Connection(Arc<Mutex<MSQLWrapper>>),
@@ -128,6 +139,20 @@ pub fn set_up_sql_db(sql_ctx: SQLCtx, config: &Config) -> Result<(), Error> {
             edit_date DATETIME DEFAULT CURRENT_TIMESTAMP,
             timeout_date DATETIME DEFAULT CURRENT_TIMESTAMP,
             comment TEXT
+        )",
+    )?;
+
+    conn.query_drop(
+        r"CREATE TABLE IF NOT EXISTS LOGIN (
+            id CHAR(36) PRIMARY KEY,
+            ip TINYTEXT,
+            INDEX ip_index USING HASH (ip),
+            user_id BIGINT NOT NULL,
+            username TINYTEXT NOT NULL,
+            userlogin TINYTEXT NOT NULL,
+            userurl TINYTEXT NOT NULL,
+            useravatar TINYTEXT NOT NULL,
+            login_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         )",
     )?;
 
@@ -705,4 +730,186 @@ pub fn get_blog_id_by_comment_id(sql_ctx: SQLCtx, cid: &str) -> Result<String, E
     } else {
         Err("Internal Error failed to query blog id by comment id".into())
     }
+}
+
+pub fn cleanup_logins(sql_ctx: SQLCtx, minutes_timeout: u64) -> Result<(), Error> {
+    let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx.try_into()?;
+    let mut conn = conn
+        .try_lock()
+        .map_err(|_| -> Error { "Failed to get unique connection".into() })?;
+
+    let mut params = MSQLParamsWrapper::new();
+    params.append_uint64(minutes_timeout);
+
+    conn.query_with_params_drop(
+        "DELETE FROM LOGIN WHERE TIMESTAMPDIFF(MINUTE, login_date, CURRENT_TIMESTAMP) > ?",
+        &params,
+    )?;
+
+    Ok(())
+}
+
+pub fn add_login(
+    sql_ctx: SQLCtx,
+    ip: Option<&str>,
+    user_id: u64,
+    username: &str,
+    userlogin: &str,
+    userurl: &str,
+    useravatar: &str,
+) -> Result<String, Error> {
+    let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx.try_into()?;
+    let mut conn = conn
+        .try_lock()
+        .map_err(|_| -> Error { "Failed to get unique connection".into() })?;
+
+    let mut id: String = uuid::Uuid::new_v4().to_string();
+
+    loop {
+        let mut params = MSQLParamsWrapper::new();
+        params.append_str(&id)?;
+        let ret = conn.query_with_params_rows("SELECT id FROM LOGIN WHERE id = ?", &params)?;
+        if ret.is_none() {
+            break;
+        } else {
+            id = uuid::Uuid::new_v4().to_string();
+        }
+    }
+
+    let mut params = MSQLParamsWrapper::new();
+    params.append_str(&id)?;
+    if let Some(ip) = ip {
+        params.append_str(ip)?;
+    } else {
+        params.append_null();
+    }
+    params.append_uint64(user_id);
+    params.append_str(username)?;
+    params.append_str(userlogin)?;
+    params.append_str(userurl)?;
+    params.append_str(useravatar)?;
+
+    conn.query_with_params_drop("INSERT INTO LOGIN (id, ip, user_id, username, userlogin, userurl, useravatar) VALUES (?, ?, ?, ?, ? ,? ,?)", &params)?;
+
+    Ok(id)
+}
+
+pub fn check_logged_in(
+    sql_ctx: SQLCtx,
+    id: &str,
+    ip: Option<&str>,
+) -> Result<Option<LoginInfo>, Error> {
+    let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx.try_into()?;
+    let mut conn = conn
+        .try_lock()
+        .map_err(|_| -> Error { "Failed to get unique connection".into() })?;
+
+    let mut params = MSQLParamsWrapper::new();
+    params.append_str(id)?;
+    if let Some(ip) = ip {
+        params.append_str(ip)?;
+    }
+    let ret = if ip.is_some() {
+        conn.query_with_params_rows("SELECT id, ip, user_id, username, userlogin, userurl, useravatar FROM LOGIN WHERE id = ? AND ip = ?", &params)?
+    } else {
+        conn.query_with_params_rows(
+            "SELECT id, ip, user_id, username, userlogin, userurl, useravatar FROM LOGIN WHERE id = ?",
+            &params,
+        )?
+    };
+
+    if let Some(rows) = ret {
+        if rows[0].len() != 7 {
+            return Err(
+                "check_logged_in: Failed due to invalid number of cols returned by query!".into(),
+            );
+        }
+        let user_id = match &rows[0][0] {
+            msql_ffi::MSQLValueEnum::Error => return Err("Invalid user_id from db!".into()),
+            msql_ffi::MSQLValueEnum::Null => return Err("Invalid user_id from db!".into()),
+            msql_ffi::MSQLValueEnum::Int64(_) => return Err("Invalid user_id from db!".into()),
+            msql_ffi::MSQLValueEnum::UInt64(_) => return Err("Invalid user_id from db!".into()),
+            msql_ffi::MSQLValueEnum::String(s) => s.to_owned(),
+            msql_ffi::MSQLValueEnum::DoubleF64(_) => return Err("Invalid user_id from db!".into()),
+        };
+        let user_ip = match &rows[0][1] {
+            msql_ffi::MSQLValueEnum::Error => return Err("Invalid user_ip from db!".into()),
+            msql_ffi::MSQLValueEnum::Null => None,
+            msql_ffi::MSQLValueEnum::Int64(_) => return Err("Invalid user_ip from db!".into()),
+            msql_ffi::MSQLValueEnum::UInt64(_) => return Err("Invalid user_ip from db!".into()),
+            msql_ffi::MSQLValueEnum::String(s) => Some(s.to_owned()),
+            msql_ffi::MSQLValueEnum::DoubleF64(_) => return Err("Invalid user_ip from db!".into()),
+        };
+        let user_github_id = match &rows[0][2] {
+            msql_ffi::MSQLValueEnum::Error => return Err("Invalid user_github_id from db!".into()),
+            msql_ffi::MSQLValueEnum::Null => return Err("Invalid user_github_id from db!".into()),
+            msql_ffi::MSQLValueEnum::Int64(i) => *i as u64,
+            msql_ffi::MSQLValueEnum::UInt64(u) => *u,
+            msql_ffi::MSQLValueEnum::String(_) => {
+                return Err("Invalid user_github_id from db!".into());
+            }
+            msql_ffi::MSQLValueEnum::DoubleF64(_) => {
+                return Err("Invalid user_github_id from db!".into());
+            }
+        };
+        let username = match &rows[0][3] {
+            msql_ffi::MSQLValueEnum::Error => return Err("Invalid username from db!".into()),
+            msql_ffi::MSQLValueEnum::Null => return Err("Invalid username from db!".into()),
+            msql_ffi::MSQLValueEnum::Int64(_) => return Err("Invalid username from db!".into()),
+            msql_ffi::MSQLValueEnum::UInt64(_) => return Err("Invalid username from db!".into()),
+            msql_ffi::MSQLValueEnum::String(s) => s.to_owned(),
+            msql_ffi::MSQLValueEnum::DoubleF64(_) => return Err("Invalid username from db!".into()),
+        };
+        let userlogin = match &rows[0][4] {
+            msql_ffi::MSQLValueEnum::Error => return Err("Invalid username from db!".into()),
+            msql_ffi::MSQLValueEnum::Null => return Err("Invalid username from db!".into()),
+            msql_ffi::MSQLValueEnum::Int64(_) => return Err("Invalid username from db!".into()),
+            msql_ffi::MSQLValueEnum::UInt64(_) => return Err("Invalid username from db!".into()),
+            msql_ffi::MSQLValueEnum::String(s) => s.to_owned(),
+            msql_ffi::MSQLValueEnum::DoubleF64(_) => return Err("Invalid username from db!".into()),
+        };
+        let userurl = match &rows[0][5] {
+            msql_ffi::MSQLValueEnum::Error => return Err("Invalid userurl from db!".into()),
+            msql_ffi::MSQLValueEnum::Null => return Err("Invalid userurl from db!".into()),
+            msql_ffi::MSQLValueEnum::Int64(_) => return Err("Invalid userurl from db!".into()),
+            msql_ffi::MSQLValueEnum::UInt64(_) => return Err("Invalid userurl from db!".into()),
+            msql_ffi::MSQLValueEnum::String(s) => s.to_owned(),
+            msql_ffi::MSQLValueEnum::DoubleF64(_) => return Err("Invalid userurl from db!".into()),
+        };
+        let useravatar = match &rows[0][6] {
+            msql_ffi::MSQLValueEnum::Error => return Err("Invalid useravatar from db!".into()),
+            msql_ffi::MSQLValueEnum::Null => return Err("Invalid useravatar from db!".into()),
+            msql_ffi::MSQLValueEnum::Int64(_) => return Err("Invalid useravatar from db!".into()),
+            msql_ffi::MSQLValueEnum::UInt64(_) => return Err("Invalid useravatar from db!".into()),
+            msql_ffi::MSQLValueEnum::String(s) => s.to_owned(),
+            msql_ffi::MSQLValueEnum::DoubleF64(_) => {
+                return Err("Invalid useravatar from db!".into());
+            }
+        };
+        Ok(Some(LoginInfo {
+            user_id,
+            user_ip,
+            user_github_id,
+            username,
+            userlogin,
+            userurl,
+            useravatar,
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn logout(sql_ctx: SQLCtx, id: &str) -> Result<(), Error> {
+    let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx.try_into()?;
+    let mut conn = conn
+        .try_lock()
+        .map_err(|_| -> Error { "Failed to get unique connection".into() })?;
+
+    let mut params = MSQLParamsWrapper::new();
+    params.append_str(id)?;
+
+    conn.query_with_params_drop("DELETE FROM LOGIN WHERE id = ?", &params)?;
+
+    Ok(())
 }

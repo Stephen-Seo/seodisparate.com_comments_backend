@@ -47,6 +47,10 @@ pub const COMMON_CSS: &str = r#"
     }
 "#;
 
+pub const LOGIN_SETUP_SCRIPT: &str = r#"
+window.localStorage.setItem("seodisp_comments_login_id", "{LOGIN_ID}");
+"#;
+
 pub const WRITE_COMMENT_PAGE: &str = r#"
     <!DOCTYPE html>
     <html lang="en">
@@ -100,6 +104,8 @@ pub const WRITE_COMMENT_PAGE: &str = r#"
                     let submit_json = JSON.stringify(submit_obj);
                     submit_comment(submit_json);
                 });
+
+                {LOGIN_SETUP}
             });
         </script>
     </body>
@@ -170,6 +176,8 @@ pub const EDIT_COMMENT_PAGE: &str = r#"
                     let submit_json = JSON.stringify(submit_obj);
                     submit_comment(submit_json);
                 });
+
+                {LOGIN_SETUP}
             });
         </script>
     </body>
@@ -191,6 +199,8 @@ pub struct Config {
     user_agent: String,
     on_comment_cmds: Vec<String>,
     admins: Vec<String>,
+    login_timeout_minutes: u64,
+    x_real_ip_enabled: bool,
 }
 
 impl Config {
@@ -212,6 +222,14 @@ impl Config {
 
     pub fn get_sql_db(&self) -> &str {
         &self.db_db
+    }
+
+    pub fn get_login_timeout(&self) -> u64 {
+        self.login_timeout_minutes
+    }
+
+    pub fn get_x_real_ip_enabled(&self) -> bool {
+        self.x_real_ip_enabled
     }
 }
 
@@ -283,7 +301,57 @@ async fn login_to_comment(
         ));
         return Ok(());
     }
-    let uuid = sql::create_rng_uuid(config.into(), None)?;
+
+    let sql_ctx: SQLCtx = SQLCtx::new_as_connection(config)?;
+
+    // Check if logged in.
+    sql::cleanup_logins(sql_ctx.clone(), config.login_timeout_minutes)?;
+
+    let mut login: Option<sql::LoginInfo> = None;
+    let login_id: Result<String, _> = req.try_query("login_id");
+    if let Ok(login_id) = login_id {
+        if config.get_x_real_ip_enabled() {
+            let real_ip: Option<&str> = req.header("x-real-ip");
+            login = sql::check_logged_in(sql_ctx.clone(), &login_id, real_ip)?;
+        } else {
+            login = sql::check_logged_in(sql_ctx.clone(), &login_id, None)?;
+        }
+    }
+
+    if let Some(login) = login {
+        // Logged in.
+        let uuid = sql::create_rng_uuid(sql_ctx.clone(), None)?;
+        sql::add_pseudo_comment_data(
+            sql_ctx.clone(),
+            &uuid,
+            login.user_github_id,
+            &login.username,
+            &login.userurl,
+            &login.useravatar,
+            Some(&blog_id),
+            None,
+        )?;
+
+        res.body(
+            WRITE_COMMENT_PAGE
+                .replace("{BLOG_ID}", &blog_id)
+                .replace("{COMMON_CSS}", COMMON_CSS)
+                .replace("{USER_AVATAR_URL}", &login.useravatar)
+                .replace("{USER_NAME}", &login.username)
+                .replace("{USER_PROFILE}", &login.userurl)
+                .replace("{BASE_URL}", &config.base_url)
+                .replace(
+                    "{BLOG_URL}",
+                    &format!("{}#{}comment{}", &blog_url, &blog_id, &uuid),
+                )
+                .replace("{STATE_STRING}", &uuid)
+                .replace("{LOGIN_SETUP}", ""),
+        );
+        return Ok(());
+    }
+
+    // Setup for Github auth.
+    let uuid = sql::create_rng_uuid(sql_ctx.clone(), None)?;
     let redirect_url = Url::parse_with_params(
         &format!("{}/github_auth_make_comment", salvo_conf.base_url),
         &[
@@ -342,7 +410,9 @@ async fn github_auth_make_comment(
 
     let config: &Config = depot.obtain().unwrap();
 
-    let is_state_valid = sql::check_rng_uuid(config.into(), &state, None)?;
+    let sql_ctx: SQLCtx = SQLCtx::new_as_connection(config)?;
+
+    let is_state_valid = sql::check_rng_uuid(sql_ctx.clone(), &state, None)?;
     if !is_state_valid {
         eprintln!("State is invalid (timed out?)!\n");
         res.status_code(StatusCode::BAD_REQUEST);
@@ -448,6 +518,13 @@ async fn github_auth_make_comment(
             .to_owned();
     }
 
+    let user_login: String = user_info
+        .get("login")
+        .ok_or(Error::from("Failed to parse user info login!"))?
+        .as_str()
+        .ok_or(Error::from("Failed to parse user info login!"))?
+        .to_string();
+
     let user_url = user_info
         .get("html_url")
         .ok_or(Error::from("Failed to parse user info profile url!"))?
@@ -461,7 +538,7 @@ async fn github_auth_make_comment(
         .ok_or(Error::from("Failed to parse user info profile avatar url!"))?;
 
     sql::add_pseudo_comment_data(
-        config.into(),
+        sql_ctx.clone(),
         &state,
         user_id,
         &user_name_str,
@@ -470,6 +547,22 @@ async fn github_auth_make_comment(
         Some(&blog_id),
         None,
     )?;
+
+    let login_id = sql::add_login(
+        sql_ctx.clone(),
+        if config.x_real_ip_enabled {
+            req.header("x-real-ip")
+        } else {
+            None
+        },
+        user_id,
+        &user_name_str,
+        &user_login,
+        user_url,
+        user_avatar_url,
+    )?;
+
+    let login_setup_script_with_id = LOGIN_SETUP_SCRIPT.replace("{LOGIN_ID}", &login_id);
 
     res.body(
         WRITE_COMMENT_PAGE
@@ -480,7 +573,8 @@ async fn github_auth_make_comment(
             .replace("{USER_PROFILE}", user_url)
             .replace("{BASE_URL}", &config.base_url)
             .replace("{BLOG_URL}", &blog_url)
-            .replace("{STATE_STRING}", &state),
+            .replace("{STATE_STRING}", &state)
+            .replace("{LOGIN_SETUP}", &login_setup_script_with_id),
     );
     Ok(())
 }
@@ -535,7 +629,76 @@ async fn login_to_edit_comment(
         .map_err(Error::err_to_client_err)?;
     let sql_ctx: SQLCtx = SQLCtx::new_as_connection(config)?;
     let uuid = sql::create_rng_uuid(sql_ctx.clone(), Some(&comment_id))?;
-    let blog_id: String = sql::get_blog_id_by_comment_id(sql_ctx, &comment_id)?;
+    let blog_id: String = sql::get_blog_id_by_comment_id(sql_ctx.clone(), &comment_id)
+        .map_err(|e| e.into_client_err())?;
+
+    // Check if logged in.
+    sql::cleanup_logins(sql_ctx.clone(), config.login_timeout_minutes)?;
+
+    let mut login: Option<sql::LoginInfo> = None;
+    let login_id: Result<String, _> = req.try_query("login_id");
+    if let Ok(login_id) = login_id {
+        if config.get_x_real_ip_enabled() {
+            let real_ip: Option<&str> = req.header("x-real-ip");
+            login = sql::check_logged_in(sql_ctx.clone(), &login_id, real_ip)?;
+        } else {
+            login = sql::check_logged_in(sql_ctx.clone(), &login_id, None)?;
+        }
+    }
+
+    if let Some(login) = login {
+        // Logged in.
+        let can_edit: bool = sql::check_edit_comment_auth(
+            sql_ctx.clone(),
+            &comment_id,
+            &login.user_github_id.to_string(),
+        )?;
+        if !can_edit {
+            eprintln!(
+                "User tried to edit comment they didn't make! {}",
+                &comment_id
+            );
+            res.status_code(StatusCode::BAD_REQUEST);
+            res.body(format!(
+                r#"<html><head><style>{}</style></head><body>
+                <b>Bad Request</b><br>
+                <p>You are not the commentor of the comment you are trying to edit.</p>
+                </body></html>"#,
+                COMMON_CSS,
+            ));
+            return Ok(());
+        }
+
+        sql::add_pseudo_comment_data(
+            sql_ctx.clone(),
+            &uuid,
+            login.user_github_id,
+            &login.username,
+            &login.userurl,
+            &login.useravatar,
+            None,
+            Some(&comment_id),
+        )?;
+
+        res.body(
+            EDIT_COMMENT_PAGE
+                .replace("{COMMON_CSS}", COMMON_CSS)
+                .replace("{USER_AVATAR_URL}", &login.useravatar)
+                .replace("{USER_NAME}", &login.username)
+                .replace("{USER_PROFILE}", &login.userurl)
+                .replace("{BASE_URL}", &config.base_url)
+                .replace(
+                    "{BLOG_URL}",
+                    &format!("{}#{}comment{}", &blog_url, &blog_id, &comment_id),
+                )
+                .replace("{COMMENT_ID}", &comment_id)
+                .replace("{LOGIN_SETUP}", ""),
+        );
+
+        return Ok(());
+    }
+
+    // Setup for Github auth.
     let redirect_url = Url::parse_with_params(
         &format!("{}/github_auth_edit_comment", config.base_url),
         &[
@@ -706,11 +869,25 @@ async fn github_auth_edit_comment(
             .ok_or(Error::from("Failed to parse user info login!"))?
             .to_owned();
     }
+
+    let user_login: String = user_info
+        .get("login")
+        .ok_or(Error::from("Failed to parse user info login!"))?
+        .as_str()
+        .ok_or(Error::from("Failed to parse user info login!"))?
+        .to_string();
+
     let user_url = user_info
         .get("html_url")
         .ok_or(Error::from("Failed to parse user info url!"))?
         .as_str()
         .ok_or(Error::from("Failed to parse user info url!"))?;
+
+    let user_avatar_url = user_info
+        .get("avatar_url")
+        .ok_or(Error::from("Failed to parse user info profile avatar url!"))?
+        .as_str()
+        .ok_or(Error::from("Failed to parse user info profile avatar url!"))?;
 
     let can_edit: bool =
         sql::check_edit_comment_auth(sql_ctx.clone(), &comment_id, &user_id.to_string())?;
@@ -731,7 +908,7 @@ async fn github_auth_edit_comment(
     }
 
     sql::add_pseudo_comment_data(
-        sql_ctx,
+        sql_ctx.clone(),
         &state,
         user_id,
         &user_name_str,
@@ -741,6 +918,22 @@ async fn github_auth_edit_comment(
         Some(&comment_id),
     )?;
 
+    let login_id = sql::add_login(
+        sql_ctx.clone(),
+        if config.x_real_ip_enabled {
+            req.header("x-real-ip")
+        } else {
+            None
+        },
+        user_id,
+        &user_name_str,
+        &user_login,
+        user_url,
+        user_avatar_url,
+    )?;
+
+    let login_setup_script_with_id = LOGIN_SETUP_SCRIPT.replace("{LOGIN_ID}", &login_id);
+
     res.body(
         EDIT_COMMENT_PAGE
             .replace("{COMMON_CSS}", COMMON_CSS)
@@ -749,7 +942,8 @@ async fn github_auth_edit_comment(
             .replace("{USER_PROFILE}", user_url)
             .replace("{BASE_URL}", &config.base_url)
             .replace("{BLOG_URL}", &blog_url)
-            .replace("{COMMENT_ID}", &comment_id),
+            .replace("{COMMENT_ID}", &comment_id)
+            .replace("{LOGIN_SETUP}", &login_setup_script_with_id),
     );
 
     Ok(())
@@ -793,6 +987,80 @@ async fn login_to_delete_comment(
         .try_query("blog_url")
         .map_err(Error::err_to_client_err)?;
     let uuid = sql::create_rng_uuid(config.into(), Some(&comment_id))?;
+
+    let sql_ctx: SQLCtx = SQLCtx::new_as_connection(config)?;
+
+    // Check if logged in.
+    sql::cleanup_logins(sql_ctx.clone(), config.login_timeout_minutes)?;
+
+    let mut login: Option<sql::LoginInfo> = None;
+    let login_id: Result<String, _> = req.try_query("login_id");
+    if let Ok(login_id) = login_id {
+        if config.get_x_real_ip_enabled() {
+            let real_ip: Option<&str> = req.header("x-real-ip");
+            login = sql::check_logged_in(sql_ctx.clone(), &login_id, real_ip)?;
+        } else {
+            login = sql::check_logged_in(sql_ctx.clone(), &login_id, None)?;
+        }
+    }
+
+    if let Some(login) = login {
+        // Logged in.
+        let is_admin: bool =
+            config.admins.iter().fold(
+                false,
+                |acc, elem| if acc { acc } else { elem == &login.userlogin },
+            );
+        let can_del: bool = sql::check_edit_comment_auth(
+            sql_ctx.clone(),
+            &comment_id,
+            &login.user_github_id.to_string(),
+        )?;
+        if !can_del && !is_admin {
+            eprintln!(
+                "User tried to delete comment they didn't make! {}",
+                &comment_id
+            );
+            res.status_code(StatusCode::BAD_REQUEST);
+            res.body(format!(
+                r#"<html><head><style>{}</style></head><body>
+                <b>Bad Request</b><br>
+                <p>You are not the commentor of the comment you are trying to edit.</p>
+                </body></html>"#,
+                COMMON_CSS,
+            ));
+            return Ok(());
+        }
+
+        if is_admin {
+            sql::try_delete_comment_id_only(sql_ctx.clone(), &comment_id)?;
+        } else {
+            sql::try_delete_comment(sql_ctx.clone(), &comment_id, login.user_github_id)?;
+        }
+
+        let script = format!(
+            r#"
+                "use strict";
+                setTimeout(() => {{
+                    window.location = "{}";
+                }}, 5000);
+            "#,
+            blog_url
+        );
+        res.body(format!(
+            r#"<html><head><style>{}</style></head><body>
+            <b>Attempted Comment Delete, reloading blog url...</b>
+            <script>
+            {}
+            </script>
+            </body></html>"#,
+            COMMON_CSS, script
+        ));
+
+        return Ok(());
+    }
+
+    // Setup for Github auth.
     let redirect_url = Url::parse_with_params(
         &format!("{}/github_auth_del_comment", config.base_url),
         &[("comment_id", comment_id), ("blog_url", blog_url)],
@@ -909,10 +1177,37 @@ async fn github_auth_del_comment(
             sleep(Duration::from_secs(3)).await;
         }
     }
+
     let user_info: serde_json::Value = reqw_resp
         .ok_or(Error::from("Failed to get user info via oauth token!"))?
         .json()
         .await?;
+
+    let mut user_name: Option<&serde_json::Value> = user_info.get("name");
+    let user_name_str: String;
+
+    if let Some(user_name_inner) = user_name {
+        if user_name_inner.is_string() {
+            user_name_str = user_name_inner
+                .as_str()
+                .ok_or(Error::from("Failed to parse user info name!"))?
+                .to_owned();
+        } else {
+            user_name = user_info.get("login");
+            user_name_str = user_name
+                .ok_or(Error::from("User has no name or login!"))?
+                .as_str()
+                .ok_or(Error::from("Failed to parse user info login!"))?
+                .to_owned();
+        }
+    } else {
+        user_name = user_info.get("login");
+        user_name_str = user_name
+            .ok_or(Error::from("User has no name or login!"))?
+            .as_str()
+            .ok_or(Error::from("Failed to parse user info login!"))?
+            .to_owned();
+    }
 
     let user_id: u64 = user_info
         .get("id")
@@ -926,6 +1221,18 @@ async fn github_auth_del_comment(
         .as_str()
         .ok_or(Error::from("Failed to parse user info login!"))?
         .to_string();
+
+    let user_url = user_info
+        .get("html_url")
+        .ok_or(Error::from("Failed to parse user info profile url!"))?
+        .as_str()
+        .ok_or(Error::from("Failed to parse user info profile url!"))?;
+
+    let user_avatar_url = user_info
+        .get("avatar_url")
+        .ok_or(Error::from("Failed to parse user info profile avatar url!"))?
+        .as_str()
+        .ok_or(Error::from("Failed to parse user info profile avatar url!"))?;
 
     let is_admin: bool =
         config.admins.iter().fold(
@@ -952,19 +1259,34 @@ async fn github_auth_del_comment(
     }
 
     if is_admin {
-        sql::try_delete_comment_id_only(sql_ctx, &comment_id)?;
+        sql::try_delete_comment_id_only(sql_ctx.clone(), &comment_id)?;
     } else {
-        sql::try_delete_comment(sql_ctx, &comment_id, user_id)?;
+        sql::try_delete_comment(sql_ctx.clone(), &comment_id, user_id)?;
     }
+
+    let login_id = sql::add_login(
+        sql_ctx.clone(),
+        if config.x_real_ip_enabled {
+            req.header("x-real-ip")
+        } else {
+            None
+        },
+        user_id,
+        &user_name_str,
+        &user_login,
+        user_url,
+        user_avatar_url,
+    )?;
 
     let script = format!(
         r#"
             "use strict";
             setTimeout(() => {{
+                window.localStorage.setItem("seodisp_comments_login_id", "{}");
                 window.location = "{}";
             }}, 5000);
         "#,
-        blog_url
+        login_id, blog_url
     );
     res.body(format!(
         r#"<html><head><style>{}</style></head><body>
@@ -998,6 +1320,46 @@ async fn get_comments_by_blog_id(
     Ok(())
 }
 
+#[handler]
+async fn logout(req: &mut Request, res: &mut Response, depot: &mut Depot) -> Result<(), Error> {
+    let config: &Config = depot.obtain().unwrap();
+    let blog_url: String = req
+        .try_query("blog_url")
+        .map_err(Error::err_to_client_err)?;
+
+    let sql_ctx: SQLCtx = SQLCtx::new_as_connection(config)?;
+
+    sql::cleanup_logins(sql_ctx.clone(), config.login_timeout_minutes)?;
+
+    let login_id: Result<String, _> = req.try_query("login_id");
+
+    if let Ok(login_id) = login_id {
+        sql::logout(sql_ctx.clone(), &login_id).map_err(Error::err_to_client_err)?;
+    }
+
+    let script = format!(
+        r#"
+            "use strict";
+            setTimeout(() => {{
+                window.localStorage.removeItem("seodisp_comments_login_id");
+                window.location = "{}";
+            }}, 5000);
+        "#,
+        blog_url
+    );
+    res.body(format!(
+        r#"<html><head><style>{}</style></head><body>
+        <b>Attempted Logout, reloading blog url...</b>
+        <script>
+        {}
+        </script>
+        </body></html>"#,
+        COMMON_CSS, script
+    ));
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() {
     signal::register_signal_handlers();
@@ -1021,6 +1383,8 @@ async fn main() {
         user_agent: config.get_user_agent().to_owned(),
         on_comment_cmds: config.get_on_comment_cmds().to_vec(),
         admins: config.get_admins().to_vec(),
+        login_timeout_minutes: config.get_login_timeout(),
+        x_real_ip_enabled: config.get_x_real_ip_enabled(),
     };
 
     sql::set_up_sql_db((&salvo_conf).into(), &salvo_conf).unwrap();
@@ -1037,7 +1401,8 @@ async fn main() {
         .push(Router::with_path("github_auth_edit_comment").get(github_auth_edit_comment))
         .push(Router::with_path("submit_edit_comment").post(submit_edit_comment))
         .push(Router::with_path("del_comment").get(login_to_delete_comment))
-        .push(Router::with_path("github_auth_del_comment").get(github_auth_del_comment));
+        .push(Router::with_path("github_auth_del_comment").get(github_auth_del_comment))
+        .push(Router::with_path("logout").get(logout));
 
     let listener = TcpListener::new(format!("{}:{}", config.get_addr(), config.get_port()));
 

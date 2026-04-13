@@ -14,7 +14,7 @@
 // OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 // PERFORMANCE OF THIS SOFTWARE.
 
-use std::num::ParseIntError;
+use std::{num::ParseIntError, str::ParseBoolError};
 
 use reqwest::StatusCode;
 use salvo::{Depot, Request, Response, Writer, async_trait};
@@ -29,6 +29,7 @@ pub enum Error {
     SalvoHttpParse(salvo::http::ParseError),
     Reqwest(reqwest::Error),
     ParseInt(ParseIntError),
+    ParseBool(ParseBoolError),
     IO(std::io::Error),
     Generic(String),
     ClientErr(Box<Error>),
@@ -53,6 +54,7 @@ impl std::fmt::Display for Error {
             Error::Generic(s) => f.write_str(s),
             Error::IO(error) => error.fmt(f),
             Error::ParseInt(error) => error.fmt(f),
+            Error::ParseBool(error) => error.fmt(f),
             Error::Reqwest(error) => error.fmt(f),
             Error::SalvoHttpParse(error) => error.fmt(f),
             Error::ClientErr(error) => error.fmt(f),
@@ -88,6 +90,12 @@ impl From<std::io::Error> for Error {
 impl From<ParseIntError> for Error {
     fn from(value: ParseIntError) -> Self {
         Error::ParseInt(value)
+    }
+}
+
+impl From<ParseBoolError> for Error {
+    fn from(value: ParseBoolError) -> Self {
+        Error::ParseBool(value)
     }
 }
 

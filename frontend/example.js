@@ -18,7 +18,34 @@ async function load_blog_comments(blog_id, blog_url, base_url) {
     let json_arr = JSON.parse(await response.text());
     if (json_arr.length == 0) {
       comment_div.innerText = "There are no comments.";
+      let logout_button = document.createElement("button");
+      logout_button.onclick = (e) => {
+        let login_id = window.localStorage.getItem("seodisp_comments_login_id");
+        if (login_id !== null) {
+          window.location = base_url + "/logout?blog_url=" + blog_url_encoded + "&login_id=" + login_id;
+        } else {
+          window.location = base_url + "/logout?blog_url=" + blog_url_encoded;
+        }
+      };
+      logout_button.innerText = "Logout from Comment System (Logins expire over time)";
+      comment_div.appendChild(document.createElement("br"));
+      comment_div.appendChild(document.createElement("br"));
+      comment_div.appendChild(logout_button);
     } else {
+      comment_div.appendChild(document.createElement("br"));
+      let logout_button = document.createElement("button");
+      logout_button.onclick = (e) => {
+        let login_id = window.localStorage.getItem("seodisp_comments_login_id");
+        if (login_id !== null) {
+          window.location = base_url + "/logout?blog_url=" + blog_url_encoded + "&login_id=" + login_id;
+        } else {
+          window.location = base_url + "/logout?blog_url=" + blog_url_encoded;
+        }
+      };
+      logout_button.innerText = "Logout from Comment System (Logins expire over time)";
+      comment_div.appendChild(logout_button);
+      comment_div.appendChild(document.createElement("br"));
+      comment_div.appendChild(document.createElement("br"));
       for (let idx = 0; idx < json_arr.length; ++idx) {
         let br_elem = document.createElement("br");
         comment_div.appendChild(br_elem);
@@ -51,13 +78,23 @@ async function load_blog_comments(blog_id, blog_url, base_url) {
         let edit_button = document.createElement("button");
         edit_button.innerText = "Edit";
         edit_button.onclick = (e) => {
-          window.location = base_url + "/edit_comment?comment_id=" + json_arr[idx].comment_id + "&blog_url=" + blog_url_encoded;
+          let login_id = window.localStorage.getItem("seodisp_comments_login_id");
+          let login_part = "";
+          if (login_id !== null) {
+              login_part = "&login_id=" + login_id;
+          }
+          window.location = base_url + "/edit_comment?comment_id=" + json_arr[idx].comment_id + "&blog_url=" + blog_url_encoded + login_part;
         };
         comment_div.appendChild(edit_button);
         let delete_button = document.createElement("button");
         delete_button.innerText = "Delete";
         delete_button.onclick = (e) => {
-          window.location = base_url + "/del_comment?comment_id=" + json_arr[idx].comment_id + "&blog_url=" + blog_url_encoded;
+          let login_id = window.localStorage.getItem("seodisp_comments_login_id");
+          let login_part = "";
+          if (login_id !== null) {
+              login_part = "&login_id=" + login_id;
+          }
+          window.location = base_url + "/del_comment?comment_id=" + json_arr[idx].comment_id + "&blog_url=" + blog_url_encoded + login_part;
         };
         comment_div.appendChild(delete_button);
       }
@@ -78,7 +115,12 @@ async function load_blog_comments(blog_id, blog_url, base_url) {
   comment_div.appendChild(document.createElement("br"));
   let new_comment_button = document.createElement("button");
   new_comment_button.onclick = (e) => {
-    window.location = base_url + "/do_comment?blog_id=" + blog_id + "&blog_url=" + blog_url_encoded;
+    let login_id = window.localStorage.getItem("seodisp_comments_login_id");
+    let login_part = "";
+    if (login_id !== null) {
+        login_part = "&login_id=" + login_id;
+    }
+    window.location = base_url + "/do_comment?blog_id=" + blog_id + "&blog_url=" + blog_url_encoded + login_part;
   };
   new_comment_button.innerText = "Submit a New Comment";
   comment_div.appendChild(new_comment_button);
