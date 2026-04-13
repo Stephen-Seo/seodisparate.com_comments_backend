@@ -1310,7 +1310,7 @@ dependencies = [
 [[package]]
 name = "msql_ffi"
 version = "0.1.0"
-source = "git+https://github.com/Stephen-Seo/PoorMansAnubis.git#11c9033b33bcc2b9c24024a3e78ff659dbd5e81f"
+source = "git+https://github.com/Stephen-Seo/PoorMansAnubis.git#7980d1bde8766ace37fadef7d71cd8b40370e3fe"
 dependencies = [
  "bindgen",
 ]
