@@ -107,6 +107,14 @@ impl Config {
     pub fn get_admins(&self) -> &[String] {
         &self.admins
     }
+
+    pub fn get_login_timeout(&self) -> u64 {
+        self.login_timeout
+    }
+
+    pub fn get_x_real_ip_enabled(&self) -> bool {
+        self.x_real_ip_enabled
+    }
 }
 
 impl TryFrom<&Path> for Config {
