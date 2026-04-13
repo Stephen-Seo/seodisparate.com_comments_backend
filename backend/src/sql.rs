@@ -794,11 +794,7 @@ pub fn add_login(
     Ok(id)
 }
 
-pub fn check_logged_in(
-    sql_ctx: SQLCtx,
-    id: &str,
-    ip: Option<&str>,
-) -> Result<Option<LoginInfo>, Error> {
+pub fn check_logged_in(sql_ctx: SQLCtx, id: &str, ip: &str) -> Result<Option<LoginInfo>, Error> {
     let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx.try_into()?;
     let mut conn = conn
         .try_lock()
@@ -806,17 +802,8 @@ pub fn check_logged_in(
 
     let mut params = MSQLParamsWrapper::new();
     params.append_str(id)?;
-    if let Some(ip) = ip {
-        params.append_str(ip)?;
-    }
-    let ret = if ip.is_some() {
-        conn.query_with_params_rows("SELECT id, ip, user_id, username, userlogin, userurl, useravatar FROM LOGIN WHERE id = ? AND ip = ?", &params)?
-    } else {
-        conn.query_with_params_rows(
-            "SELECT id, ip, user_id, username, userlogin, userurl, useravatar FROM LOGIN WHERE id = ?",
-            &params,
-        )?
-    };
+    params.append_str(ip)?;
+    let ret = conn.query_with_params_rows("SELECT id, ip, user_id, username, userlogin, userurl, useravatar FROM LOGIN WHERE id = ? AND ip = ?", &params)?;
 
     if let Some(rows) = ret {
         if rows[0].len() != 7 {

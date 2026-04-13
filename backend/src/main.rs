@@ -310,11 +310,13 @@ async fn login_to_comment(
     let mut login: Option<sql::LoginInfo> = None;
     let login_id: Result<String, _> = req.try_query("login_id");
     if let Ok(login_id) = login_id {
-        if config.get_x_real_ip_enabled() {
-            let real_ip: Option<&str> = req.header("x-real-ip");
+        if config.get_x_real_ip_enabled()
+            && let Some(real_ip) = req.header("x-real-ip")
+        {
             login = sql::check_logged_in(sql_ctx.clone(), &login_id, real_ip)?;
         } else {
-            login = sql::check_logged_in(sql_ctx.clone(), &login_id, None)?;
+            login =
+                sql::check_logged_in(sql_ctx.clone(), &login_id, &req.remote_addr().to_string())?;
         }
     }
 
@@ -638,11 +640,13 @@ async fn login_to_edit_comment(
     let mut login: Option<sql::LoginInfo> = None;
     let login_id: Result<String, _> = req.try_query("login_id");
     if let Ok(login_id) = login_id {
-        if config.get_x_real_ip_enabled() {
-            let real_ip: Option<&str> = req.header("x-real-ip");
+        if config.get_x_real_ip_enabled()
+            && let Some(real_ip) = req.header("x-real-ip")
+        {
             login = sql::check_logged_in(sql_ctx.clone(), &login_id, real_ip)?;
         } else {
-            login = sql::check_logged_in(sql_ctx.clone(), &login_id, None)?;
+            login =
+                sql::check_logged_in(sql_ctx.clone(), &login_id, &req.remote_addr().to_string())?;
         }
     }
 
@@ -996,11 +1000,13 @@ async fn login_to_delete_comment(
     let mut login: Option<sql::LoginInfo> = None;
     let login_id: Result<String, _> = req.try_query("login_id");
     if let Ok(login_id) = login_id {
-        if config.get_x_real_ip_enabled() {
-            let real_ip: Option<&str> = req.header("x-real-ip");
+        if config.get_x_real_ip_enabled()
+            && let Some(real_ip) = req.header("x-real-ip")
+        {
             login = sql::check_logged_in(sql_ctx.clone(), &login_id, real_ip)?;
         } else {
-            login = sql::check_logged_in(sql_ctx.clone(), &login_id, None)?;
+            login =
+                sql::check_logged_in(sql_ctx.clone(), &login_id, &req.remote_addr().to_string())?;
         }
     }
 
