@@ -340,7 +340,10 @@ async fn login_to_comment(
                 .replace("{USER_NAME}", &login.username)
                 .replace("{USER_PROFILE}", &login.userurl)
                 .replace("{BASE_URL}", &config.base_url)
-                .replace("{BLOG_URL}", &blog_url)
+                .replace(
+                    "{BLOG_URL}",
+                    &format!("{}#{}comment{}", &blog_url, &blog_id, &uuid),
+                )
                 .replace("{STATE_STRING}", &uuid)
                 .replace("{LOGIN_SETUP}", ""),
         );
@@ -684,7 +687,10 @@ async fn login_to_edit_comment(
                 .replace("{USER_NAME}", &login.username)
                 .replace("{USER_PROFILE}", &login.userurl)
                 .replace("{BASE_URL}", &config.base_url)
-                .replace("{BLOG_URL}", &blog_url)
+                .replace(
+                    "{BLOG_URL}",
+                    &format!("{}#{}comment{}", &blog_url, &blog_id, &uuid),
+                )
                 .replace("{COMMENT_ID}", &comment_id)
                 .replace("{LOGIN_SETUP}", ""),
         );
