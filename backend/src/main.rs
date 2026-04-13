@@ -689,7 +689,7 @@ async fn login_to_edit_comment(
                 .replace("{BASE_URL}", &config.base_url)
                 .replace(
                     "{BLOG_URL}",
-                    &format!("{}#{}comment{}", &blog_url, &blog_id, &uuid),
+                    &format!("{}#{}comment{}", &blog_url, &blog_id, &comment_id),
                 )
                 .replace("{COMMENT_ID}", &comment_id)
                 .replace("{LOGIN_SETUP}", ""),
