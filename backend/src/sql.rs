@@ -813,7 +813,7 @@ pub fn check_logged_in(
         conn.query_with_params_rows("SELECT id, ip, user_id, username, userlogin, userurl, useravatar FROM LOGIN WHERE id = ? AND ip = ?", &params)?
     } else {
         conn.query_with_params_rows(
-            "SELECT id, ip, user_id, username, userurl, useravatar FROM LOGIN WHERE id = ?",
+            "SELECT id, ip, user_id, username, userlogin, userurl, useravatar FROM LOGIN WHERE id = ?",
             &params,
         )?
     };
