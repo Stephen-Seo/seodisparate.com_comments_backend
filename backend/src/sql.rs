@@ -143,9 +143,9 @@ pub fn set_up_sql_db(sql_ctx: SQLCtx, config: &Config) -> Result<(), Error> {
     )?;
 
     conn.query_drop(
-        r"CREATE TABLE IF NOT EXISTS LOGIN (
+        r"CREATE TABLE IF NOT EXISTS LOGIN2 (
             id CHAR(36) PRIMARY KEY,
-            ip TINYTEXT,
+            ip TINYTEXT NOT NULL,
             INDEX ip_index USING HASH (ip),
             user_id BIGINT NOT NULL,
             username TINYTEXT NOT NULL,
@@ -157,6 +157,7 @@ pub fn set_up_sql_db(sql_ctx: SQLCtx, config: &Config) -> Result<(), Error> {
     )?;
 
     {
+        // Migrate COMMENT
         let mut params: MSQLParamsWrapper = MSQLParamsWrapper::new();
         params.append_str(config.get_sql_db())?;
         let rows_res = conn.query_with_params_rows("SELECT * FROM information_schema.tables WHERE table_schema = ? AND table_name = 'COMMENT'", &params).map_err(|e| Error::Generic(e.to_owned()))?;
@@ -172,6 +173,9 @@ pub fn set_up_sql_db(sql_ctx: SQLCtx, config: &Config) -> Result<(), Error> {
             conn.query_drop(r"DROP TABLE COMMENT")?;
         }
     }
+
+    // No need to migrate LOGIN to LOGIN2, because entries are temporary.
+    conn.query_drop("DROP TABLE IF EXISTS LOGIN")?;
 
     // Drop unused tables. The data in these tables were meant to be temporary
     // so no migration is required for them.
@@ -742,7 +746,7 @@ pub fn cleanup_logins(sql_ctx: SQLCtx, minutes_timeout: u64) -> Result<(), Error
     params.append_uint64(minutes_timeout);
 
     conn.query_with_params_drop(
-        "DELETE FROM LOGIN WHERE TIMESTAMPDIFF(MINUTE, login_date, CURRENT_TIMESTAMP) > ?",
+        "DELETE FROM LOGIN2 WHERE TIMESTAMPDIFF(MINUTE, login_date, CURRENT_TIMESTAMP) > ?",
         &params,
     )?;
 
@@ -768,7 +772,7 @@ pub fn add_login(
     loop {
         let mut params = MSQLParamsWrapper::new();
         params.append_str(&id)?;
-        let ret = conn.query_with_params_rows("SELECT id FROM LOGIN WHERE id = ?", &params)?;
+        let ret = conn.query_with_params_rows("SELECT id FROM LOGIN2 WHERE id = ?", &params)?;
         if ret.is_none() {
             break;
         } else {
@@ -789,7 +793,7 @@ pub fn add_login(
     params.append_str(userurl)?;
     params.append_str(useravatar)?;
 
-    conn.query_with_params_drop("INSERT INTO LOGIN (id, ip, user_id, username, userlogin, userurl, useravatar) VALUES (?, ?, ?, ?, ? ,? ,?)", &params)?;
+    conn.query_with_params_drop("INSERT INTO LOGIN2 (id, ip, user_id, username, userlogin, userurl, useravatar) VALUES (?, ?, ?, ?, ? ,? ,?)", &params)?;
 
     Ok(id)
 }
@@ -803,7 +807,7 @@ pub fn check_logged_in(sql_ctx: SQLCtx, id: &str, ip: &str) -> Result<Option<Log
     let mut params = MSQLParamsWrapper::new();
     params.append_str(id)?;
     params.append_str(ip)?;
-    let ret = conn.query_with_params_rows("SELECT id, ip, user_id, username, userlogin, userurl, useravatar FROM LOGIN WHERE id = ? AND ip = ?", &params)?;
+    let ret = conn.query_with_params_rows("SELECT id, ip, user_id, username, userlogin, userurl, useravatar FROM LOGIN2 WHERE id = ? AND ip = ?", &params)?;
 
     if let Some(rows) = ret {
         if rows[0].len() != 7 {
@@ -887,7 +891,7 @@ pub fn check_logged_in(sql_ctx: SQLCtx, id: &str, ip: &str) -> Result<Option<Log
     }
 }
 
-pub fn logout(sql_ctx: SQLCtx, id: &str) -> Result<(), Error> {
+pub fn logout(sql_ctx: SQLCtx, id: &str, ip: &str) -> Result<(), Error> {
     let conn: Arc<Mutex<MSQLWrapper>> = sql_ctx.try_into()?;
     let mut conn = conn
         .try_lock()
@@ -895,8 +899,9 @@ pub fn logout(sql_ctx: SQLCtx, id: &str) -> Result<(), Error> {
 
     let mut params = MSQLParamsWrapper::new();
     params.append_str(id)?;
+    params.append_str(ip)?;
 
-    conn.query_with_params_drop("DELETE FROM LOGIN WHERE id = ?", &params)?;
+    conn.query_with_params_drop("DELETE FROM LOGIN2 WHERE id = ? AND ip = ?", &params)?;
 
     Ok(())
 }

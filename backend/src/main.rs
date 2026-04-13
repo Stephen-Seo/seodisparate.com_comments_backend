@@ -1339,8 +1339,14 @@ async fn logout(req: &mut Request, res: &mut Response, depot: &mut Depot) -> Res
 
     let login_id: Result<String, _> = req.try_query("login_id");
 
+    let client_ip = if config.get_x_real_ip_enabled() && let Some(real_ip) = req.header("x-real-ip") {
+        real_ip
+    } else {
+        req.remote_addr().to_string()
+    };
+
     if let Ok(login_id) = login_id {
-        sql::logout(sql_ctx.clone(), &login_id).map_err(Error::err_to_client_err)?;
+        sql::logout(sql_ctx.clone(), &login_id, &client_ip).map_err(Error::err_to_client_err)?;
     }
 
     let script = format!(
