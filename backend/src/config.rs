@@ -22,6 +22,8 @@ use std::{
 
 use crate::error::Error;
 
+const DEFAULT_LOGIN_TIMEOUT_MINUTES: u64 = 60;
+
 #[derive(Debug, Clone)]
 pub struct Config {
     sql_user: String,
@@ -39,6 +41,8 @@ pub struct Config {
     user_agent: String,
     on_comment_cmds: Vec<String>,
     admins: Vec<String>,
+    login_timeout: u64,
+    x_real_ip_enabled: bool,
 }
 
 impl Config {
@@ -130,6 +134,10 @@ impl TryFrom<&Path> for Config {
 
         let mut admins: Vec<String> = Vec::new();
 
+        let mut login_timeout_minutes: u64 = DEFAULT_LOGIN_TIMEOUT_MINUTES;
+
+        let mut x_real_ip_enabled: bool = false;
+
         let mut key: String = String::new();
         let mut val: String = String::new();
         let mut is_parsing_key = true;
@@ -176,6 +184,10 @@ impl TryFrom<&Path> for Config {
                     on_comment_cmds.push(val);
                 } else if key == "admin" {
                     admins.push(val);
+                } else if key == "login_timeout" {
+                    login_timeout_minutes = val.parse()?;
+                } else if key == "x_real_ip_enabled" {
+                    x_real_ip_enabled = val.parse()?;
                 } else {
                     println!("WARNING: Got unknown config key \"{}\"!", key);
                 }
@@ -217,6 +229,10 @@ impl TryFrom<&Path> for Config {
                 on_comment_cmds.push(val);
             } else if key == "admin" {
                 admins.push(val);
+            } else if key == "login_timeout" {
+                login_timeout_minutes = val.parse()?;
+            } else if key == "x_real_ip_enabled" {
+                x_real_ip_enabled = val.parse()?;
             } else {
                 println!("WARNING: Got unknown config key \"{}\"!", key);
             }
@@ -238,6 +254,8 @@ impl TryFrom<&Path> for Config {
             user_agent: user_agent?,
             on_comment_cmds,
             admins,
+            login_timeout: login_timeout_minutes,
+            x_real_ip_enabled,
         })
     }
 }
