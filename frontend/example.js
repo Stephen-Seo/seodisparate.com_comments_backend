@@ -19,7 +19,7 @@ async function load_blog_comments(blog_id, blog_url, base_url) {
     if (json_arr.length == 0) {
       comment_div.innerText = "There are no comments.";
       let note_div = document.createElement("div");
-      note_div.setAttribute("style", "max-width: 40em;");
+      note_div.setAttribute("style", "max-width: 70vw;");
       note_div.innerText = "When creating/editing/deleting comments, you consent to storing session information to stay logged in with your publically available Github info so that re-authenticating with Github per action isn't required until the session data expires.";
       comment_div.appendChild(note_div);
       let logout_button = document.createElement("button");
@@ -37,7 +37,7 @@ async function load_blog_comments(blog_id, blog_url, base_url) {
       comment_div.appendChild(logout_button);
     } else {
       let note_div = document.createElement("div");
-      note_div.setAttribute("style", "max-width: 40em;");
+      note_div.setAttribute("style", "max-width: 70vw;");
       note_div.innerText = "When creating/editing/deleting comments, you consent to storing session information to stay logged in with your publically available Github info so that re-authenticating with Github per action isn't required until the session data expires.";
       comment_div.appendChild(note_div);
       comment_div.appendChild(document.createElement("br"));
