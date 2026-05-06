@@ -788,7 +788,7 @@ pub fn check_logged_in(sql_ctx: SQLCtx, id: &str, ip: &str) -> Result<Option<Log
         };
         let userlogin = match &rows[0][4] {
             msql_ffi::MSQLValueEnum::String(s) => s.to_owned(),
-            _ => return Err("Invalid username from db!".into()),
+            _ => return Err("Invalid userlogin from db!".into()),
         };
         let userurl = match &rows[0][5] {
             msql_ffi::MSQLValueEnum::String(s) => s.to_owned(),
