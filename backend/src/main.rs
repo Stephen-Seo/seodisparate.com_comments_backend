@@ -1339,7 +1339,9 @@ async fn logout(req: &mut Request, res: &mut Response, depot: &mut Depot) -> Res
 
     let login_id: Result<String, _> = req.try_query("login_id");
 
-    let client_ip = if config.get_x_real_ip_enabled() && let Some(real_ip) = req.header("x-real-ip") {
+    let client_ip = if config.get_x_real_ip_enabled()
+        && let Some(real_ip) = req.header("x-real-ip")
+    {
         real_ip
     } else {
         req.remote_addr().to_string()

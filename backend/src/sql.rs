@@ -417,48 +417,29 @@ pub fn add_comment(sql_ctx: SQLCtx, state: &str, comment: &str) -> Result<Pseudo
     if let Some(rows) = rows {
         if rows.len() == 1 && rows[0].len() == 5 {
             user_id = match &rows[0][0] {
-                msql_ffi::MSQLValueEnum::Error => None,
-                msql_ffi::MSQLValueEnum::Null => None,
                 msql_ffi::MSQLValueEnum::Int64(i) => Some(*i as u64),
                 msql_ffi::MSQLValueEnum::UInt64(u) => Some(*u),
-                msql_ffi::MSQLValueEnum::String(_) => None,
-                msql_ffi::MSQLValueEnum::DoubleF64(_) => None,
+                _ => None,
             };
 
             username = match &rows[0][1] {
-                msql_ffi::MSQLValueEnum::Error => None,
-                msql_ffi::MSQLValueEnum::Null => None,
-                msql_ffi::MSQLValueEnum::Int64(_) => None,
-                msql_ffi::MSQLValueEnum::UInt64(_) => None,
                 msql_ffi::MSQLValueEnum::String(s) => Some(s.to_owned()),
-                msql_ffi::MSQLValueEnum::DoubleF64(_) => None,
+                _ => None,
             };
 
             userurl = match &rows[0][2] {
-                msql_ffi::MSQLValueEnum::Error => None,
-                msql_ffi::MSQLValueEnum::Null => None,
-                msql_ffi::MSQLValueEnum::Int64(_) => None,
-                msql_ffi::MSQLValueEnum::UInt64(_) => None,
                 msql_ffi::MSQLValueEnum::String(s) => Some(s.to_owned()),
-                msql_ffi::MSQLValueEnum::DoubleF64(_) => None,
+                _ => None,
             };
 
             useravatar = match &rows[0][3] {
-                msql_ffi::MSQLValueEnum::Error => None,
-                msql_ffi::MSQLValueEnum::Null => None,
-                msql_ffi::MSQLValueEnum::Int64(_) => None,
-                msql_ffi::MSQLValueEnum::UInt64(_) => None,
                 msql_ffi::MSQLValueEnum::String(s) => Some(s.to_owned()),
-                msql_ffi::MSQLValueEnum::DoubleF64(_) => None,
+                _ => None,
             };
 
             blog_post_id = match &rows[0][4] {
-                msql_ffi::MSQLValueEnum::Error => None,
-                msql_ffi::MSQLValueEnum::Null => None,
-                msql_ffi::MSQLValueEnum::Int64(_) => None,
-                msql_ffi::MSQLValueEnum::UInt64(_) => None,
                 msql_ffi::MSQLValueEnum::String(s) => Some(s.to_owned()),
-                msql_ffi::MSQLValueEnum::DoubleF64(_) => None,
+                _ => None,
             };
         } else {
             return Err("Add comment: Failed to query pseudo comment (invalid length)".into());
@@ -607,42 +588,22 @@ pub fn get_comments_per_blog_id(sql_ctx: SQLCtx, blog_id: &str) -> Result<Vec<Co
 
     for row in rows.as_ref().unwrap() {
         let comment_id: String = match &row[0] {
-            msql_ffi::MSQLValueEnum::Error => continue,
-            msql_ffi::MSQLValueEnum::Null => continue,
-            msql_ffi::MSQLValueEnum::Int64(_) => continue,
-            msql_ffi::MSQLValueEnum::UInt64(_) => continue,
             msql_ffi::MSQLValueEnum::String(s) => s.to_owned(),
-            msql_ffi::MSQLValueEnum::DoubleF64(_) => continue,
+            _ => continue,
         };
         let username: String = match &row[1] {
-            msql_ffi::MSQLValueEnum::Error => continue,
-            msql_ffi::MSQLValueEnum::Null => continue,
-            msql_ffi::MSQLValueEnum::Int64(_) => continue,
-            msql_ffi::MSQLValueEnum::UInt64(_) => continue,
             msql_ffi::MSQLValueEnum::String(s) => s.to_owned(),
-            msql_ffi::MSQLValueEnum::DoubleF64(_) => continue,
+            _ => continue,
         };
         let userurl: String = match &row[2] {
-            msql_ffi::MSQLValueEnum::Error => continue,
-            msql_ffi::MSQLValueEnum::Null => continue,
-            msql_ffi::MSQLValueEnum::Int64(_) => continue,
-            msql_ffi::MSQLValueEnum::UInt64(_) => continue,
             msql_ffi::MSQLValueEnum::String(s) => s.to_owned(),
-            msql_ffi::MSQLValueEnum::DoubleF64(_) => continue,
+            _ => continue,
         };
         let useravatar: String = match &row[3] {
-            msql_ffi::MSQLValueEnum::Error => continue,
-            msql_ffi::MSQLValueEnum::Null => continue,
-            msql_ffi::MSQLValueEnum::Int64(_) => continue,
-            msql_ffi::MSQLValueEnum::UInt64(_) => continue,
             msql_ffi::MSQLValueEnum::String(s) => s.to_owned(),
-            msql_ffi::MSQLValueEnum::DoubleF64(_) => continue,
+            _ => continue,
         };
         let create_date: PrimitiveDateTime = match &row[4] {
-            msql_ffi::MSQLValueEnum::Error => continue,
-            msql_ffi::MSQLValueEnum::Null => continue,
-            msql_ffi::MSQLValueEnum::Int64(_) => continue,
-            msql_ffi::MSQLValueEnum::UInt64(_) => continue,
             msql_ffi::MSQLValueEnum::String(s) => {
                 let res = PrimitiveDateTime::parse(s, &parsing_format);
 
@@ -652,13 +613,9 @@ pub fn get_comments_per_blog_id(sql_ctx: SQLCtx, blog_id: &str) -> Result<Vec<Co
                     continue;
                 }
             }
-            msql_ffi::MSQLValueEnum::DoubleF64(_) => continue,
+            _ => continue,
         };
         let edit_date: PrimitiveDateTime = match &row[5] {
-            msql_ffi::MSQLValueEnum::Error => continue,
-            msql_ffi::MSQLValueEnum::Null => continue,
-            msql_ffi::MSQLValueEnum::Int64(_) => continue,
-            msql_ffi::MSQLValueEnum::UInt64(_) => continue,
             msql_ffi::MSQLValueEnum::String(s) => {
                 let res = PrimitiveDateTime::parse(s, &parsing_format);
 
@@ -668,15 +625,11 @@ pub fn get_comments_per_blog_id(sql_ctx: SQLCtx, blog_id: &str) -> Result<Vec<Co
                     continue;
                 }
             }
-            msql_ffi::MSQLValueEnum::DoubleF64(_) => continue,
+            _ => continue,
         };
         let comment: String = match &row[6] {
-            msql_ffi::MSQLValueEnum::Error => continue,
-            msql_ffi::MSQLValueEnum::Null => continue,
-            msql_ffi::MSQLValueEnum::Int64(_) => continue,
-            msql_ffi::MSQLValueEnum::UInt64(_) => continue,
             msql_ffi::MSQLValueEnum::String(s) => s.to_owned(),
-            msql_ffi::MSQLValueEnum::DoubleF64(_) => continue,
+            _ => continue,
         };
 
         comments.push(Comment {
@@ -816,66 +769,34 @@ pub fn check_logged_in(sql_ctx: SQLCtx, id: &str, ip: &str) -> Result<Option<Log
             );
         }
         let user_id = match &rows[0][0] {
-            msql_ffi::MSQLValueEnum::Error => return Err("Invalid user_id from db!".into()),
-            msql_ffi::MSQLValueEnum::Null => return Err("Invalid user_id from db!".into()),
-            msql_ffi::MSQLValueEnum::Int64(_) => return Err("Invalid user_id from db!".into()),
-            msql_ffi::MSQLValueEnum::UInt64(_) => return Err("Invalid user_id from db!".into()),
             msql_ffi::MSQLValueEnum::String(s) => s.to_owned(),
-            msql_ffi::MSQLValueEnum::DoubleF64(_) => return Err("Invalid user_id from db!".into()),
+            _ => return Err("Invalid user_id from db!".into()),
         };
         let user_ip = match &rows[0][1] {
-            msql_ffi::MSQLValueEnum::Error => return Err("Invalid user_ip from db!".into()),
             msql_ffi::MSQLValueEnum::Null => None,
-            msql_ffi::MSQLValueEnum::Int64(_) => return Err("Invalid user_ip from db!".into()),
-            msql_ffi::MSQLValueEnum::UInt64(_) => return Err("Invalid user_ip from db!".into()),
             msql_ffi::MSQLValueEnum::String(s) => Some(s.to_owned()),
-            msql_ffi::MSQLValueEnum::DoubleF64(_) => return Err("Invalid user_ip from db!".into()),
+            _ => return Err("Invalid user_ip from db!".into()),
         };
         let user_github_id = match &rows[0][2] {
-            msql_ffi::MSQLValueEnum::Error => return Err("Invalid user_github_id from db!".into()),
-            msql_ffi::MSQLValueEnum::Null => return Err("Invalid user_github_id from db!".into()),
             msql_ffi::MSQLValueEnum::Int64(i) => *i as u64,
             msql_ffi::MSQLValueEnum::UInt64(u) => *u,
-            msql_ffi::MSQLValueEnum::String(_) => {
-                return Err("Invalid user_github_id from db!".into());
-            }
-            msql_ffi::MSQLValueEnum::DoubleF64(_) => {
-                return Err("Invalid user_github_id from db!".into());
-            }
+            _ => return Err("Invalid user_github_id from db!".into()),
         };
         let username = match &rows[0][3] {
-            msql_ffi::MSQLValueEnum::Error => return Err("Invalid username from db!".into()),
-            msql_ffi::MSQLValueEnum::Null => return Err("Invalid username from db!".into()),
-            msql_ffi::MSQLValueEnum::Int64(_) => return Err("Invalid username from db!".into()),
-            msql_ffi::MSQLValueEnum::UInt64(_) => return Err("Invalid username from db!".into()),
             msql_ffi::MSQLValueEnum::String(s) => s.to_owned(),
-            msql_ffi::MSQLValueEnum::DoubleF64(_) => return Err("Invalid username from db!".into()),
+            _ => return Err("Invalid username from db!".into()),
         };
         let userlogin = match &rows[0][4] {
-            msql_ffi::MSQLValueEnum::Error => return Err("Invalid username from db!".into()),
-            msql_ffi::MSQLValueEnum::Null => return Err("Invalid username from db!".into()),
-            msql_ffi::MSQLValueEnum::Int64(_) => return Err("Invalid username from db!".into()),
-            msql_ffi::MSQLValueEnum::UInt64(_) => return Err("Invalid username from db!".into()),
             msql_ffi::MSQLValueEnum::String(s) => s.to_owned(),
-            msql_ffi::MSQLValueEnum::DoubleF64(_) => return Err("Invalid username from db!".into()),
+            _ => return Err("Invalid username from db!".into()),
         };
         let userurl = match &rows[0][5] {
-            msql_ffi::MSQLValueEnum::Error => return Err("Invalid userurl from db!".into()),
-            msql_ffi::MSQLValueEnum::Null => return Err("Invalid userurl from db!".into()),
-            msql_ffi::MSQLValueEnum::Int64(_) => return Err("Invalid userurl from db!".into()),
-            msql_ffi::MSQLValueEnum::UInt64(_) => return Err("Invalid userurl from db!".into()),
             msql_ffi::MSQLValueEnum::String(s) => s.to_owned(),
-            msql_ffi::MSQLValueEnum::DoubleF64(_) => return Err("Invalid userurl from db!".into()),
+            _ => return Err("Invalid userurl from db!".into()),
         };
         let useravatar = match &rows[0][6] {
-            msql_ffi::MSQLValueEnum::Error => return Err("Invalid useravatar from db!".into()),
-            msql_ffi::MSQLValueEnum::Null => return Err("Invalid useravatar from db!".into()),
-            msql_ffi::MSQLValueEnum::Int64(_) => return Err("Invalid useravatar from db!".into()),
-            msql_ffi::MSQLValueEnum::UInt64(_) => return Err("Invalid useravatar from db!".into()),
             msql_ffi::MSQLValueEnum::String(s) => s.to_owned(),
-            msql_ffi::MSQLValueEnum::DoubleF64(_) => {
-                return Err("Invalid useravatar from db!".into());
-            }
+            _ => return Err("Invalid useravatar from db!".into()),
         };
         Ok(Some(LoginInfo {
             user_id,
