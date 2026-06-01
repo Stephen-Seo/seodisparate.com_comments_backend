@@ -12,4 +12,4 @@ serde = "1.0"
 serde_json = "1.0"
 time = { version = "0.3", features = ["serde", "formatting", "local-offset"] }
 libc = "0.2"
-msql_ffi = { git = "https://github.com/Stephen-Seo/PoorMansAnubis.git", rev = "72ba8afc99c9379357d4c3da89d0c5dab3ed8b9d" }
+msql_ffi = { git = "https://github.com/Stephen-Seo/PoorMansAnubis.git", rev = "f61aa8c2af850570b228969e684ef8acea1dd068" }
