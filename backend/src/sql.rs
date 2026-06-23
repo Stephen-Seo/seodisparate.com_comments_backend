@@ -568,9 +568,9 @@ pub fn get_comments_per_blog_id(sql_ctx: SQLCtx, blog_id: &str) -> Result<Vec<Co
     let utc_offset = UtcOffset::current_local_offset()?;
 
     let parsing_format =
-        format_description::parse("[year]-[month]-[day]T[hour]:[minute]:[second]")?;
+        format_description::parse_borrowed::<3>("[year]-[month]-[day]T[hour]:[minute]:[second]")?;
 
-    let output_format = format_description::parse(
+    let output_format = format_description::parse_borrowed::<3>(
         "[year]-[month]-[day]T[hour]:[minute]:[second][offset_hour sign:mandatory]:[offset_minute]",
     )?;
 
