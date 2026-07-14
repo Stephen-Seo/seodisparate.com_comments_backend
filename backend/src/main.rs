@@ -247,7 +247,7 @@ async fn comment_text_get(
     res: &mut Response,
     depot: &mut Depot,
 ) -> Result<(), Error> {
-    let config: &Config = depot.obtain().unwrap();
+    let config: &Config = depot.get_typed().unwrap();
 
     let comment_id: String = req
         .try_query("comment_id")
@@ -270,8 +270,8 @@ async fn login_to_comment(
     let blog_url: String = req
         .try_query("blog_url")
         .map_err(Error::err_to_client_err)?;
-    let salvo_conf = depot.obtain::<Config>().unwrap();
-    let config: &Config = depot.obtain().unwrap();
+    let salvo_conf = depot.get_typed::<Config>().unwrap();
+    let config: &Config = depot.get_typed().unwrap();
     let is_allowed_url: bool = salvo_conf.allowed_urls.iter().fold(false, |acc, val| {
         if acc { acc } else { blog_url.starts_with(val) }
     });
@@ -344,7 +344,7 @@ async fn login_to_comment(
                 .replace("{BASE_URL}", &config.base_url)
                 .replace(
                     "{BLOG_URL}",
-                    &format!("{}#{}comment{}", &blog_url, &blog_id, &uuid),
+                    &format!("{}#{}comment{}", blog_url, blog_id, uuid),
                 )
                 .replace("{STATE_STRING}", &uuid)
                 .replace("{LOGIN_SETUP}", ""),
@@ -360,7 +360,7 @@ async fn login_to_comment(
             ("blog_id", &blog_id),
             (
                 "blog_url",
-                &format!("{}#{}comment{}", blog_url, &blog_id, &uuid),
+                &format!("{}#{}comment{}", blog_url, blog_id, uuid),
             ),
         ],
     )
@@ -410,7 +410,7 @@ async fn github_auth_make_comment(
     let state: String = req.try_query("state").map_err(Error::err_to_client_err)?;
     let code: String = req.try_query("code").map_err(Error::err_to_client_err)?;
 
-    let config: &Config = depot.obtain().unwrap();
+    let config: &Config = depot.get_typed().unwrap();
 
     let sql_ctx: SQLCtx = SQLCtx::new_as_connection(config)?;
 
@@ -433,7 +433,7 @@ async fn github_auth_make_comment(
             ("blog_id", &blog_id),
             (
                 "blog_url",
-                &format!("{}#{}comment{}", blog_url, &blog_id, &state),
+                &format!("{}#{}comment{}", blog_url, blog_id, state),
             ),
         ],
     )
@@ -597,7 +597,7 @@ async fn submit_comment(req: &mut Request, depot: &mut Depot) -> Result<(), Erro
         .as_str()
         .ok_or(Error::from("JSON parse error: \"comment_text\"").into_client_err())?;
 
-    let config: &Config = depot.obtain().unwrap();
+    let config: &Config = depot.get_typed().unwrap();
 
     let pseudo_comment: sql::PseudoComment =
         sql::add_comment(config.into(), req_state, req_comment)?;
@@ -622,7 +622,7 @@ async fn login_to_edit_comment(
     res: &mut Response,
     depot: &mut Depot,
 ) -> Result<(), Error> {
-    let config: &Config = depot.obtain().unwrap();
+    let config: &Config = depot.get_typed().unwrap();
     let comment_id: String = req
         .try_query("comment_id")
         .map_err(Error::err_to_client_err)?;
@@ -660,7 +660,7 @@ async fn login_to_edit_comment(
         if !can_edit {
             eprintln!(
                 "User tried to edit comment they didn't make! {}",
-                &comment_id
+                comment_id
             );
             res.status_code(StatusCode::BAD_REQUEST);
             res.body(format!(
@@ -693,7 +693,7 @@ async fn login_to_edit_comment(
                 .replace("{BASE_URL}", &config.base_url)
                 .replace(
                     "{BLOG_URL}",
-                    &format!("{}#{}comment{}", &blog_url, &blog_id, &comment_id),
+                    &format!("{}#{}comment{}", blog_url, blog_id, comment_id),
                 )
                 .replace("{COMMENT_ID}", &comment_id)
                 .replace("{LOGIN_SETUP}", ""),
@@ -710,7 +710,7 @@ async fn login_to_edit_comment(
             ("blog_id", &blog_id),
             (
                 "blog_url",
-                &format!("{}#{}comment{}", blog_url, &blog_id, &comment_id),
+                &format!("{}#{}comment{}", blog_url, blog_id, comment_id),
             ),
         ],
     )
@@ -762,7 +762,7 @@ async fn github_auth_edit_comment(
     let state: String = req.try_query("state").map_err(Error::err_to_client_err)?;
     let code: String = req.try_query("code").map_err(Error::err_to_client_err)?;
 
-    let config: &Config = depot.obtain().unwrap();
+    let config: &Config = depot.get_typed().unwrap();
 
     let sql_ctx: SQLCtx = SQLCtx::new_as_connection(config)?;
 
@@ -784,7 +784,7 @@ async fn github_auth_edit_comment(
             ("blog_id", &blog_id),
             (
                 "blog_url",
-                &format!("{}#{}comment{}", blog_url, &blog_id, &comment_id),
+                &format!("{}#{}comment{}", blog_url, blog_id, comment_id),
             ),
         ],
     )
@@ -898,7 +898,7 @@ async fn github_auth_edit_comment(
     if !can_edit {
         eprintln!(
             "User tried to edit comment they didn't make! {}",
-            &comment_id
+            comment_id
         );
         res.status_code(StatusCode::BAD_REQUEST);
         res.body(format!(
@@ -955,7 +955,7 @@ async fn github_auth_edit_comment(
 
 #[handler]
 async fn submit_edit_comment(req: &mut Request, depot: &mut Depot) -> Result<(), Error> {
-    let config: &Config = depot.obtain().unwrap();
+    let config: &Config = depot.get_typed().unwrap();
 
     let request_json: serde_json::Value =
         req.parse_json().await.map_err(Error::err_to_client_err)?;
@@ -982,7 +982,7 @@ async fn login_to_delete_comment(
     res: &mut Response,
     depot: &mut Depot,
 ) -> Result<(), Error> {
-    let config: &Config = depot.obtain().unwrap();
+    let config: &Config = depot.get_typed().unwrap();
 
     let comment_id: String = req
         .try_query("comment_id")
@@ -1025,7 +1025,7 @@ async fn login_to_delete_comment(
         if !can_del && !is_admin {
             eprintln!(
                 "User tried to delete comment they didn't make! {}",
-                &comment_id
+                comment_id
             );
             res.status_code(StatusCode::BAD_REQUEST);
             res.body(format!(
@@ -1118,7 +1118,7 @@ async fn github_auth_del_comment(
     let state: String = req.try_query("state").map_err(Error::err_to_client_err)?;
     let code: String = req.try_query("code").map_err(Error::err_to_client_err)?;
 
-    let config: &Config = depot.obtain().unwrap();
+    let config: &Config = depot.get_typed().unwrap();
     let sql_ctx: SQLCtx = SQLCtx::new_as_connection(config)?;
 
     let is_state_valid = sql::check_rng_uuid(sql_ctx.clone(), &comment_id, Some(&state))?;
@@ -1251,7 +1251,7 @@ async fn github_auth_del_comment(
     if !can_del && !is_admin {
         eprintln!(
             "User tried to delete comment they didn't make! {}",
-            &comment_id
+            comment_id
         );
         res.status_code(StatusCode::BAD_REQUEST);
         res.body(format!(
@@ -1313,7 +1313,7 @@ async fn get_comments_by_blog_id(
     res: &mut Response,
     depot: &mut Depot,
 ) -> Result<(), Error> {
-    let config: &Config = depot.obtain().unwrap();
+    let config: &Config = depot.get_typed().unwrap();
 
     let blog_id: String = req.try_query("blog_id").map_err(Error::err_to_client_err)?;
 
@@ -1328,7 +1328,7 @@ async fn get_comments_by_blog_id(
 
 #[handler]
 async fn logout(req: &mut Request, res: &mut Response, depot: &mut Depot) -> Result<(), Error> {
-    let config: &Config = depot.obtain().unwrap();
+    let config: &Config = depot.get_typed().unwrap();
     let blog_url: String = req
         .try_query("blog_url")
         .map_err(Error::err_to_client_err)?;
