@@ -9,3 +9,4 @@ updates:
     directory: "backend/" # Location of package manifests
     schedule:
       interval: "weekly"
+
