@@ -5,8 +5,7 @@
 
 version: 2
 updates:
-  - package-ecosystem: "cargo" # See documentation for possible values
-    directory: "backend/" # Location of package manifests
+  - package-ecosystem: "cargo"
+    directory: "backend/"
     schedule:
       interval: "weekly"
-
