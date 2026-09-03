@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-salvo = { version = "0.95", features = ["affix-state"] }
+salvo = { version = "0.96", features = ["affix-state"] }
 reqwest = { version = "0.13", features = ["json", "native-tls-vendored", "query"] }
 tokio = "1.53"
 uuid = { version = "1.24", features = ["v4"] }
