@@ -7,9 +7,9 @@ edition = "2024"
 salvo = { version = "1.0", features = ["affix-state"] }
 reqwest = { version = "0.13", features = ["json", "native-tls-vendored", "query"] }
 tokio = "1.53"
-uuid = { version = "1.26", features = ["v4"] }
+uuid = { version = "1.27", features = ["v4"] }
 serde = "1.0"
 serde_json = "1.0"
 time = { version = "0.3", features = ["serde", "formatting", "local-offset"] }
 libc = "0.2"
-msql_ffi = { git = "https://github.com/Stephen-Seo/PoorMansAnubis.git", rev = "f61aa8c2af850570b228969e684ef8acea1dd068" }
+msql_ffi = { git = "https://github.com/Stephen-Seo/PoorMansAnubis.git", rev = "08fdec35bf3f524dad91e629724ad18df6e0b403" }
