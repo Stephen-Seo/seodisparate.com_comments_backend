@@ -6,8 +6,8 @@ edition = "2024"
 [dependencies]
 salvo = { version = "1.0", features = ["affix-state"] }
 reqwest = { version = "0.13", features = ["json", "native-tls-vendored", "query"] }
-tokio = "1.53"
-uuid = { version = "1.28", features = ["v4"] }
+tokio = "1.54"
+uuid = { version = "1.29", features = ["v4"] }
 serde = "1.0"
 serde_json = "1.0"
 time = { version = "0.3", features = ["serde", "formatting", "local-offset"] }
