@@ -135,7 +135,7 @@ dependencies = [
  "regex",
  "rustc-hash",
  "shlex",
- "syn 3.0.10",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -1136,7 +1136,7 @@ dependencies = [
 [[package]]
 name = "msql_ffi"
 version = "0.1.0"
-source = "git+https://github.com/Stephen-Seo/PoorMansAnubis.git?tag=0.2.4#d64b3781e4930fc36fc634bafc62951c02769e8e"
+source = "git+https://github.com/Stephen-Seo/PoorMansAnubis.git?tag=0.2.1#e42ce523b4f33eed539bd7d6d10cf55f905d165a"
 dependencies = [
  "bindgen",
 ]
